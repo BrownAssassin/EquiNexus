@@ -1,0 +1,26 @@
+# Competition data and local Kaggle credentials
+data/
+input/
+.kaggle/
+kaggle.json
+filament-segmentation-2026/
+
+# Generated outputs and model artifacts
+artifacts/
+outputs/
+checkpoints/
+*.pt
+*.pth
+*.ckpt
+submission*.csv
+
+# Python environments and caches
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ipynb_checkpoints/
+
+# Official competition scorer
+self-evaluation-notebook.ipynb

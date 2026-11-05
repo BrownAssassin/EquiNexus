@@ -1,0 +1,2 @@
+# Setup placeholder only. Replace with exact, tested package==version pins
+# for the final pipeline before requesting competition evaluation.
