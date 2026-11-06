@@ -36,9 +36,10 @@ This matters because the public MAGFiLO v1.0 release overlaps the competition te
 
 - Team: EquiNexus (Arv Bali and Thai Le).
 - Keep large competition data, credentials, checkpoints, generated images, and submission CSVs out of Git.
-- Use Kaggle for competition data, GPU training/inference, and submission runs where possible. Preserve key notebook versions and reusable source in this repository for the final archive.
+- Use Kaggle for competition data and larger GPU runs. Use the local RTX 5070 for smaller or patch-based experiments and smoke checks. Keep the same source, observation split, and scorer on both runtimes.
+- Keep all local competition files inside this repository. Store datasets, reference exports, and split manifests under the ignored data/ folder; store generated runs under ignored artifacts/.
 - Validation must group by original observation/image filename, not by annotator-specific COCO image ID, to prevent the same H-alpha observation appearing on both sides of a split.
-- Pin exact dependencies only after the implementation/runtime is chosen; the root `requirements.txt` is currently a placeholder.
+- Baseline dependencies are pinned in `requirements.txt`, with the CUDA-enabled PyTorch runtime in `requirements-gpu.txt`. Update these pins only when a tested experiment requires a change.
 
 ## Official references
 

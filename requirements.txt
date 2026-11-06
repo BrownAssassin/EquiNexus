@@ -1,2 +1,7 @@
-# Setup placeholder only. Replace with exact, tested package==version pins
-# for the final pipeline before requesting competition evaluation.
+numpy==2.2.6
+opencv-python-headless==4.12.0.88
+pandas==3.1.1
+scikit-learn==1.9.1
+scipy==1.18.1
+matplotlib==3.11.2
+pycocotools==2.0.11

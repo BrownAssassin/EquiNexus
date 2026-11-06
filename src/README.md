@@ -1,3 +1,3 @@
 # Reusable code
 
-Place reusable data loading, training, inference, scoring, and RLE utilities here. Keep Kaggle notebook cells focused on orchestration and result inspection; copy or import the versioned source needed by the final reproduction notebook.
+The filament_baseline package contains competition-input discovery, observation-level splitting, the fixed local-contrast predictor, COCO RLE utilities, the scorer port, and run reporting. Keep notebooks focused on environment setup, orchestration, and result inspection; they should import this package rather than duplicate model or metric logic.

@@ -3,7 +3,6 @@ data/
 input/
 .kaggle/
 kaggle.json
-filament-segmentation-2026/
 
 # Generated outputs and model artifacts
 artifacts/
@@ -17,10 +16,9 @@ submission*.csv
 # Python environments and caches
 .venv/
 venv/
+.cache/
+.tmp/
 __pycache__/
 *.py[cod]
 .pytest_cache/
 .ipynb_checkpoints/
-
-# Official competition scorer
-self-evaluation-notebook.ipynb

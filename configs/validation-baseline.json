@@ -1,0 +1,14 @@
+{
+  "seed": 42,
+  "validation_fraction": 0.2,
+  "stratify_by": "year",
+  "expected_split_sha256": "30cb2ec52437daf97e769a3a61bf83350062e6cf4f5d00af1f8399649065e48e",
+  "blur_kernel": 31,
+  "solar_disk_radius_fraction": 0.44,
+  "closing_kernel": 3,
+  "component_connectivity": 8,
+  "min_component_area": 50,
+  "max_component_area": 50000,
+  "iou_threshold": 0.5,
+  "diagnostic_overlap_threshold": 0.0
+}

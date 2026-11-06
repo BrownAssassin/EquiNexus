@@ -1,5 +1,5 @@
 # Kaggle notebooks
 
-Use Kaggle notebooks as the primary place to access competition inputs and GPU accelerators. Save committed notebook snapshots here with a short purpose in the filename, for example `baseline_train.ipynb`, `validation.ipynb`, and `reproduce_submission.ipynb`.
+Use Kaggle notebooks to access competition inputs and GPU accelerators. The validation baseline notebook clones the public repository at main, records the resolved Git commit, and imports the shared implementation from src/.
 
-Keep the final reproduction notebook self-contained enough for the organizers to run against the competition input. Record the Kaggle notebook version, accelerator, and output submission checksum in the experiment log. Do not commit downloaded data, model weights, credentials, or generated submission files.
+Attach the competition dataset in Kaggle and enable internet for the repository clone and dependency check. The baseline itself is CPU-based and does not require a GPU; use a GPU accelerator for later model experiments. Record the Kaggle notebook version, source commit, accelerator, dependency versions, split digest, and output checksums in the experiment log. Do not commit downloaded data, model weights, credentials, or generated submission files.
