@@ -40,6 +40,66 @@ def encode_binary_mask(binary_mask: np.ndarray) -> dict[str, Any]:
     return {"size": [int(binary_mask.shape[0]), int(binary_mask.shape[1])], "counts": counts}
 
 
+def encode_cropped_binary_mask(
+    binary_crop: np.ndarray,
+    x_offset: int,
+    y_offset: int,
+    full_shape: tuple[int, int],
+) -> dict[str, Any]:
+    """Encode a small mask crop into a full-image COCO RLE without a full canvas."""
+    if binary_crop.ndim != 2:
+        raise ValueError("Expected a 2D binary crop")
+    height, width = full_shape
+    crop_height, crop_width = binary_crop.shape
+    if (
+        height < 1
+        or width < 1
+        or x_offset < 0
+        or y_offset < 0
+        or x_offset + crop_width > width
+        or y_offset + crop_height > height
+    ):
+        raise ValueError("Binary crop falls outside the full image bounds")
+    crop = np.asarray(binary_crop, dtype=bool)
+    if not np.any(crop):
+        raise ValueError("Cannot encode an empty component crop")
+
+    run_values: list[int] = []
+    current_value = 0
+    current_length = 0
+
+    def append_run(value: int, length: int) -> None:
+        nonlocal current_value, current_length
+        if length <= 0:
+            return
+        value = int(value)
+        if value == current_value:
+            current_length += length
+        else:
+            run_values.append(current_length)
+            current_value = value
+            current_length = length
+
+    append_run(0, x_offset * height)
+    for column_index in range(crop_width):
+        column = crop[:, column_index]
+        append_run(0, y_offset)
+        starts = np.r_[0, np.flatnonzero(column[1:] != column[:-1]) + 1]
+        ends = np.r_[starts[1:], crop_height]
+        for start, end in zip(starts, ends, strict=True):
+            append_run(int(column[start]), int(end - start))
+        append_run(0, height - y_offset - crop_height)
+    append_run(0, (width - x_offset - crop_width) * height)
+    run_values.append(current_length)
+    encoded = mask_utils.frPyObjects(
+        {"size": [height, width], "counts": run_values}, height, width
+    )
+    return {
+        "size": list(encoded["size"]),
+        "counts": encoded["counts"].decode("ascii"),
+    }
+
+
 def decode_rle(rle: dict[str, Any]) -> np.ndarray:
     encoded = dict(rle)
     if isinstance(encoded["counts"], str):

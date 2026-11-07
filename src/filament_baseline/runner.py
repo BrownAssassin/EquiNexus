@@ -29,9 +29,16 @@ def _within(path: Path, parent: Path) -> bool:
         return False
 
 
+def _is_kaggle_runtime() -> bool:
+    return bool(os.environ.get("KAGGLE_KERNEL_RUN_TYPE")) or (
+        Path("/kaggle/input").is_dir() and Path("/kaggle/working").is_dir()
+    )
+
+
 def _source_fingerprint(repo_root: Path) -> str:
     paths = [
         *sorted((repo_root / "src").rglob("*.py")),
+        *sorted((repo_root / "scripts").glob("*.py")),
         repo_root / "configs" / "validation-baseline.json",
         repo_root / "notebooks" / "validation_baseline.ipynb",
         repo_root / "requirements.txt",
@@ -182,7 +189,7 @@ def run_validation(
 ) -> dict[str, Any]:
     run_started = time.perf_counter()
     repo_root = Path(repo_root).resolve()
-    kaggle_runtime = Path("/kaggle/working").is_dir()
+    kaggle_runtime = _is_kaggle_runtime()
     dataset_root = _resolve_data_root(data_root, repo_root)
     if not kaggle_runtime and not _within(dataset_root, repo_root):
         raise ValueError(

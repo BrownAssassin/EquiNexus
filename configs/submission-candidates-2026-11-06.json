@@ -1,0 +1,75 @@
+{
+  "source_run": "final-ensemble-v1",
+  "candidates": [
+    {
+      "name": "ensemble-50-50",
+      "first_weight": 0.5,
+      "instance": {
+        "foreground_threshold": 0.65,
+        "boundary_threshold": 0.7,
+        "boundary_weight": 1.5,
+        "seed_threshold": 0.45,
+        "seed_min_area": 8,
+        "min_instance_area": 400,
+        "solar_radius": 950
+      },
+      "oof_evidence": "artifacts/oof-experiments/oof-blend-perann10k-tta8-p50-consensus512-5k-tta4/metrics.json"
+    },
+    {
+      "name": "ensemble-75-25",
+      "first_weight": 0.75,
+      "instance": {
+        "foreground_threshold": 0.65,
+        "boundary_threshold": 0.7,
+        "boundary_weight": 1.5,
+        "seed_threshold": 0.45,
+        "seed_min_area": 8,
+        "min_instance_area": 400,
+        "solar_radius": 950
+      },
+      "oof_evidence": "artifacts/oof-experiments/oof-blend-perann75-consensus25/metrics.json"
+    },
+    {
+      "name": "annotator-only-bnd080",
+      "first_weight": 1.0,
+      "instance": {
+        "foreground_threshold": 0.65,
+        "boundary_threshold": 0.8,
+        "boundary_weight": 1.5,
+        "seed_threshold": 0.45,
+        "seed_min_area": 8,
+        "min_instance_area": 400,
+        "solar_radius": 950
+      },
+      "oof_evidence": "artifacts/oof-experiments/oof-perann1024-10k-tta8-single-bnd080/metrics.json"
+    },
+    {
+      "name": "annotator-only-bnd070",
+      "first_weight": 1.0,
+      "instance": {
+        "foreground_threshold": 0.65,
+        "boundary_threshold": 0.7,
+        "boundary_weight": 1.5,
+        "seed_threshold": 0.45,
+        "seed_min_area": 8,
+        "min_instance_area": 400,
+        "solar_radius": 950
+      },
+      "oof_evidence": "artifacts/oof-experiments/oof-perann1024-10k-tta8/metrics.json"
+    },
+    {
+      "name": "ensemble-25-75",
+      "first_weight": 0.25,
+      "instance": {
+        "foreground_threshold": 0.65,
+        "boundary_threshold": 0.7,
+        "boundary_weight": 1.5,
+        "seed_threshold": 0.45,
+        "seed_min_area": 8,
+        "min_instance_area": 400,
+        "solar_radius": 950
+      },
+      "oof_evidence": "artifacts/oof-experiments/oof-blend-perann25-consensus75/metrics.json"
+    }
+  ]
+}
