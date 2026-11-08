@@ -1,0 +1,3 @@
+# Optional instance-detector environment for the Kaggle GPU sprint.
+# Ultralytics YOLO11 code and pretrained COCO weights are distributed under AGPL-3.0.
+ultralytics==8.4.173

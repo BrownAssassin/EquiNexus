@@ -1,3 +1,6 @@
+# Copyright (C) 2026 EquiNexus contributors
+# SPDX-License-Identifier: AGPL-3.0-only
+
 from __future__ import annotations
 
 import argparse
@@ -191,9 +194,9 @@ def run_validation(
     repo_root = Path(repo_root).resolve()
     kaggle_runtime = _is_kaggle_runtime()
     dataset_root = _resolve_data_root(data_root, repo_root)
-    if not kaggle_runtime and not _within(dataset_root, repo_root):
+    if not kaggle_runtime and not _within(dataset_root, repo_root / "data"):
         raise ValueError(
-            f"Local competition data must stay inside the repository: {dataset_root}"
+            f"Local competition data must stay under data/: {dataset_root}"
         )
 
     if output_root is None:

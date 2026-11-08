@@ -1,3 +1,6 @@
+# Copyright (C) 2026 EquiNexus contributors
+# SPDX-License-Identifier: AGPL-3.0-only
+
 from __future__ import annotations
 
 import csv
@@ -91,3 +94,49 @@ def create_observation_split(
         raise AssertionError("Observation split keys do not match COCO file_name groups")
 
     return ObservationSplit(assignments, manifest_path, digest)
+
+
+def load_observation_split_manifest(
+    dataset: CompetitionDataset,
+    manifest_path: str | Path,
+    *,
+    allow_subset: bool = False,
+) -> ObservationSplit:
+    """Load an explicitly grouped train/validation manifest under data/splits."""
+    manifest_path = Path(manifest_path).expanduser().resolve()
+    content = manifest_path.read_bytes()
+    assignments: dict[str, str] = {}
+    with manifest_path.open("r", encoding="utf-8", newline="") as stream:
+        reader = csv.DictReader(stream)
+        if reader.fieldnames != ["file_name", "year", "site", "partition"]:
+            raise ValueError("Split manifest must contain file_name, year, site, partition columns")
+        for row in reader:
+            name = row["file_name"]
+            if name in assignments:
+                raise ValueError(f"Duplicate observation in split manifest: {name}")
+            if name not in dataset.views_by_observation:
+                raise ValueError(f"Unknown observation in split manifest: {name}")
+            original_view = dataset.views_by_observation[name][0]
+            if int(row["year"]) != original_view.year or row["site"] != original_view.site:
+                raise ValueError(f"Year/site metadata changed for observation {name}")
+            if row["partition"] not in {"train", "validation"}:
+                raise ValueError(f"Invalid partition for observation {name}: {row['partition']}")
+            assignments[name] = row["partition"]
+
+    dataset_names = set(dataset.observation_names)
+    manifest_names = set(assignments)
+    if not manifest_names:
+        raise ValueError("Split manifest contains no observations")
+    if allow_subset:
+        if not manifest_names.issubset(dataset_names):
+            raise ValueError("Split manifest contains observations outside the competition dataset")
+    elif manifest_names != dataset_names:
+        raise ValueError("Split manifest must cover every competition training observation")
+    if set(assignments.values()) != {"train", "validation"}:
+        raise ValueError("Split manifest must contain both train and validation observations")
+
+    return ObservationSplit(
+        assignments=assignments,
+        manifest_path=manifest_path,
+        sha256=hashlib.sha256(content).hexdigest(),
+    )

@@ -1,3 +1,6 @@
+# Copyright (C) 2026 EquiNexus contributors
+# SPDX-License-Identifier: AGPL-3.0-only
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -10,8 +13,7 @@ from scipy import ndimage as ndi
 from skimage.segmentation import watershed
 
 from .data import IMAGE_SIZE
-from .features import prepare_input_channels
-from .model import FilamentUNet
+from .features import input_mode_for_channel_count, prepare_input_channels
 from .predictor import PredictedInstance, encode_label_components
 
 
@@ -64,7 +66,7 @@ def _inverse_transform(tensor: torch.Tensor, operation: int) -> torch.Tensor:
 
 @torch.inference_mode()
 def predict_probabilities(
-    model: FilamentUNet,
+    model: torch.nn.Module,
     gray_image: np.ndarray,
     *,
     device: torch.device | None = None,
@@ -83,9 +85,7 @@ def predict_probabilities(
     device = device or next(model.parameters()).device
     model.eval()
 
-    if model.in_channels not in (1, 2):
-        raise ValueError(f"Unsupported model input channel count: {model.in_channels}")
-    input_mode = "raw" if model.in_channels == 1 else "raw_local_contrast"
+    input_mode = input_mode_for_channel_count(model.in_channels)
     normalized_channels = prepare_input_channels(
         gray_image, input_mode, solar_radius=950
     )
@@ -131,6 +131,8 @@ def instances_from_probabilities(
     boundary_probability: np.ndarray,
     file_name: str,
     config: InstanceConfig | None = None,
+    *,
+    disk_mask: np.ndarray | None = None,
 ) -> list[PredictedInstance]:
     config = config or InstanceConfig()
     if foreground_probability.shape != boundary_probability.shape:
@@ -138,8 +140,13 @@ def instances_from_probabilities(
     height, width = foreground_probability.shape
     if (height, width) != (IMAGE_SIZE, IMAGE_SIZE):
         raise ValueError(f"Expected {IMAGE_SIZE}x{IMAGE_SIZE} probability maps")
-    yy, xx = np.ogrid[:height, :width]
-    disk = (yy - 1023.0) ** 2 + (xx - 1023.0) ** 2 <= config.solar_radius**2
+    if disk_mask is None:
+        yy, xx = np.ogrid[:height, :width]
+        disk = (yy - 1023.0) ** 2 + (xx - 1023.0) ** 2 <= config.solar_radius**2
+    else:
+        if disk_mask.shape != (height, width):
+            raise ValueError("disk_mask must have the same shape as the probability maps")
+        disk = np.asarray(disk_mask, dtype=bool)
     foreground = (foreground_probability >= config.foreground_threshold) & disk
     if not np.any(foreground):
         return []

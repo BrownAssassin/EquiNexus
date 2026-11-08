@@ -1,3 +1,6 @@
+# Copyright (C) 2026 EquiNexus contributors
+# SPDX-License-Identifier: AGPL-3.0-only
+
 from __future__ import annotations
 
 import json
@@ -31,6 +34,7 @@ class CompetitionDataset:
     annotations_by_image_id: dict[str, tuple[dict[str, Any], ...]]
     views_by_observation: dict[str, tuple[ImageView, ...]]
     categories: tuple[dict[str, Any], ...]
+    image_resize_to: tuple[int, int] | None = None
 
     @property
     def observation_names(self) -> tuple[str, ...]:

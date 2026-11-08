@@ -1,3 +1,6 @@
+# Copyright (C) 2026 EquiNexus contributors
+# SPDX-License-Identifier: AGPL-3.0-only
+
 from __future__ import annotations
 
 import argparse
@@ -13,14 +16,14 @@ import numpy as np
 import torch
 
 from .data import inventory, load_dataset
-from .features import InputMode
+from .features import INPUT_MODES, InputMode
 from .inference import (
     InstanceConfig,
     instances_from_probabilities,
     predict_probabilities,
 )
 from .learning import FilamentPatchDataset, TargetMode
-from .model import FilamentUNet
+from .model import DINO_V2_REPOSITORY, build_filament_model, model_architecture
 from .predictor import read_grayscale
 from .runner import (
     _git_status,
@@ -44,15 +47,31 @@ def _within(path: Path, parent: Path) -> bool:
         return False
 
 
+def _file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
 def _is_kaggle_runtime() -> bool:
     return bool(os.environ.get("KAGGLE_KERNEL_RUN_TYPE")) or (
         Path("/kaggle/input").is_dir() and Path("/kaggle/working").is_dir()
     )
 
 
-def _load_model(checkpoint_path: Path, device: torch.device) -> FilamentUNet:
+def _load_model(
+    checkpoint_path: Path,
+    device: torch.device,
+    *,
+    hub_dir: str | Path | None = None,
+) -> torch.nn.Module:
     checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=True)
-    model = FilamentUNet(**checkpoint.get("model_config", {}))
+    if hub_dir is not None:
+        Path(hub_dir).mkdir(parents=True, exist_ok=True)
+        torch.hub.set_dir(str(hub_dir))
+    model = build_filament_model(**checkpoint.get("model_config", {}))
     model.load_state_dict(checkpoint["model"])
     model.to(device)
     if device.type == "cuda":
@@ -85,6 +104,10 @@ def run_model_experiment(
     steps: int = 5_000,
     batch_size: int = 2,
     patch_size: int = 512,
+    base_channels: int = 16,
+    model_type: str = "unet",
+    pretrained_backbone: bool = False,
+    hub_repository: str = DINO_V2_REPOSITORY,
     tta: int = 1,
     input_mode: InputMode = "raw",
     foreground_threshold: float = 0.35,
@@ -94,14 +117,16 @@ def run_model_experiment(
     train_observation_limit: int | None = None,
     validation_limit: int | None = None,
     overlay_count: int = 8,
+    initial_weights: str | Path | None = None,
+    external_pretraining: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,63}", run_name):
         raise ValueError("run_name must use only letters, digits, dot, underscore, or dash")
     repo_root = Path(repo_root).resolve()
     kaggle_runtime = _is_kaggle_runtime()
     dataset_root = _resolve_data_root(data_root, repo_root)
-    if not kaggle_runtime and not _within(dataset_root, repo_root):
-        raise ValueError(f"Local competition data must stay inside the repository: {dataset_root}")
+    if not kaggle_runtime and not _within(dataset_root, repo_root / "data"):
+        raise ValueError(f"Local competition data must stay under data/: {dataset_root}")
     run_root = (
         Path("/kaggle/working") / "equinexus" / run_name
         if kaggle_runtime
@@ -110,6 +135,11 @@ def run_model_experiment(
     if not kaggle_runtime and not _within(run_root, repo_root):
         raise ValueError(f"Local experiment outputs must stay in the repository: {run_root}")
     run_root.mkdir(parents=True, exist_ok=True)
+    hub_dir = (
+        Path("/kaggle/working/equinexus/pretrained/torch/hub")
+        if kaggle_runtime
+        else repo_root / "artifacts" / "pretrained" / "torch" / "hub"
+    )
     repository_info = _git_status(repo_root)
 
     config = json.loads((repo_root / "configs" / "validation-baseline.json").read_text())
@@ -167,7 +197,7 @@ def run_model_experiment(
     checkpoint_path = run_root / "best_model.pt"
     started = time.perf_counter()
     print(
-        f"Training {target_mode} U-Net: {len(train_names)} train groups, "
+        f"Training {model_type}: {len(train_names)} train groups, "
         f"{len(validation_names)} validation groups, {steps} steps, "
         f"patch {patch_size}, batch {batch_size}",
         flush=True,
@@ -178,12 +208,18 @@ def run_model_experiment(
         output_path=checkpoint_path,
         steps=steps,
         batch_size=batch_size,
+        base_channels=base_channels,
         seed=int(config["seed"]),
         validation_interval=max(100, min(500, steps // 5)),
+        model_type=model_type,
+        pretrained_backbone=pretrained_backbone,
+        hub_repository=hub_repository,
+        hub_dir=hub_dir,
+        initial_weights=initial_weights,
     )
 
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    model = _load_model(checkpoint_path, device)
+    model = _load_model(checkpoint_path, device, hub_dir=hub_dir)
     cache_dir = run_root / "probabilities"
     probability_cache_paths = {}
     inference_started = time.perf_counter()
@@ -237,6 +273,27 @@ def run_model_experiment(
     )
 
     hardware = hardware_info()
+    pretrained_checkpoint = hub_dir / "checkpoints" / "dinov2_vits14_pretrain.pth"
+    if model_type == "dinov2_vits14" and pretrained_backbone and not pretrained_checkpoint.is_file():
+        raise FileNotFoundError(f"DINOv2 checkpoint cache is missing: {pretrained_checkpoint}")
+    pretrained_checkpoint_sha256 = (
+        _file_sha256(pretrained_checkpoint)
+        if model_type == "dinov2_vits14" and pretrained_backbone
+        else None
+    )
+    initial_weights_path = Path(initial_weights).expanduser().resolve() if initial_weights else None
+    if initial_weights_path is not None and not initial_weights_path.is_file():
+        raise FileNotFoundError(f"Initial model checkpoint is missing: {initial_weights_path}")
+    adaptation_metadata = None
+    adaptation_metadata_path = pretrained_checkpoint.with_suffix(".json")
+    if (
+        model_type == "dinov2_vits14"
+        and pretrained_backbone
+        and adaptation_metadata_path.is_file()
+    ):
+        candidate_adaptation = json.loads(adaptation_metadata_path.read_text(encoding="utf-8"))
+        if candidate_adaptation.get("adapted_checkpoint_sha256") == pretrained_checkpoint_sha256:
+            adaptation_metadata = candidate_adaptation
     if os.environ.get("EQUINEXUS_SOURCE_COMMIT"):
         repository_info["commit"] = os.environ["EQUINEXUS_SOURCE_COMMIT"]
         repository_info["worktree_dirty"] = True
@@ -259,8 +316,9 @@ def run_model_experiment(
             "evaluated_validation_observations": len(validation_names),
         },
         "method": {
-            "architecture": "from_scratch_five_level_unet_foreground_boundary",
-            "base_channels": 16,
+            "architecture": model_architecture(model_type),
+            "model_type": model_type,
+            "base_channels": base_channels,
             "target_mode": target_mode,
             "patch_size": patch_size,
             "input_mode": input_mode,
@@ -269,8 +327,34 @@ def run_model_experiment(
             "seed": int(config["seed"]),
             "tta": tta,
             "instance_config": instance_config.__dict__,
-            "external_supervised_weights": False,
-            "external_ground_truth": False,
+            "pretrained_backbone": pretrained_backbone,
+            "pretrained_backbone_repository": (
+                hub_repository
+                if pretrained_backbone and model_type == "dinov2_vits14"
+                else "smp-hub/resnet34.imagenet@7a57b34f723329ff020b3f8bc41771163c519d0c"
+                if pretrained_backbone and model_type == "smp_unet_resnet34"
+                else None
+            ),
+            "pretrained_backbone_license": "Apache-2.0"
+            if model_type == "dinov2_vits14" and pretrained_backbone
+            else None,
+            "pretrained_backbone_checkpoint_sha256": pretrained_checkpoint_sha256,
+            "pretraining_data": (
+                "DINOv2 LVD-142M, self-supervised without labels"
+                if pretrained_backbone and model_type == "dinov2_vits14"
+                else "ImageNet-1K supervised ResNet34 encoder weights"
+                if pretrained_backbone and model_type == "smp_unet_resnet34"
+                else None
+            ),
+            "external_unlabeled_data": adaptation_metadata,
+            "external_supervised_weights": external_pretraining is not None,
+            "external_ground_truth": external_pretraining is not None,
+            "external_supervised_pretraining": external_pretraining,
+            "initial_weights_sha256": (
+                _file_sha256(initial_weights_path)
+                if initial_weights_path is not None
+                else None
+            ),
         },
         "training": training_result,
         "metrics": metrics,
@@ -312,9 +396,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--steps", type=int, default=5_000)
     parser.add_argument("--batch-size", type=int, default=2)
     parser.add_argument("--patch-size", type=int, default=512)
+    parser.add_argument("--base-channels", type=int, default=16)
+    parser.add_argument("--model-type", choices=("unet", "dinov2_vits14"), default="unet")
+    parser.add_argument("--pretrained-backbone", action="store_true")
+    parser.add_argument("--hub-repository", default=DINO_V2_REPOSITORY)
     parser.add_argument("--tta", type=int, choices=(1, 2, 4, 8), default=1)
     parser.add_argument(
-        "--input-mode", choices=("raw", "raw_local_contrast"), default="raw"
+        "--input-mode", choices=INPUT_MODES, default="raw"
     )
     parser.add_argument("--foreground-threshold", type=float, default=0.35)
     parser.add_argument("--boundary-threshold", type=float, default=0.5)
@@ -323,6 +411,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--train-observation-limit", type=int, default=None)
     parser.add_argument("--validation-limit", type=int, default=None)
     parser.add_argument("--overlay-count", type=int, default=8)
+    parser.add_argument("--initial-weights", default=None)
     args = parser.parse_args(argv)
     result = run_model_experiment(
         repo_root=args.repo_root,
@@ -332,6 +421,10 @@ def main(argv: list[str] | None = None) -> int:
         steps=args.steps,
         batch_size=args.batch_size,
         patch_size=args.patch_size,
+        base_channels=args.base_channels,
+        model_type=args.model_type,
+        pretrained_backbone=args.pretrained_backbone,
+        hub_repository=args.hub_repository,
         tta=args.tta,
         input_mode=args.input_mode,
         foreground_threshold=args.foreground_threshold,
@@ -341,6 +434,7 @@ def main(argv: list[str] | None = None) -> int:
         train_observation_limit=args.train_observation_limit,
         validation_limit=args.validation_limit,
         overlay_count=args.overlay_count,
+        initial_weights=args.initial_weights,
     )
     print(json.dumps(result["metrics"]["global"], indent=2, sort_keys=True))
     return 0

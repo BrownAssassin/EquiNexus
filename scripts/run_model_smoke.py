@@ -1,3 +1,6 @@
+# Copyright (C) 2026 EquiNexus contributors
+# SPDX-License-Identifier: AGPL-3.0-only
+
 from __future__ import annotations
 
 import json
@@ -13,6 +16,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
 from filament_baseline.data import load_dataset  # noqa: E402
+from filament_baseline.features import input_channel_count  # noqa: E402
 from filament_baseline.inference import predict_probabilities  # noqa: E402
 from filament_baseline.learning import FilamentPatchDataset  # noqa: E402
 from filament_baseline.model import FilamentUNet  # noqa: E402
@@ -23,12 +27,12 @@ from filament_baseline.training import training_loss  # noqa: E402
 def main() -> int:
     parser = argparse.ArgumentParser(description="Smoke-test model training, crops, and inference.")
     parser.add_argument(
-        "--input-mode", choices=("raw", "raw_local_contrast"), default="raw"
+        "--input-mode", choices=("raw", "raw_local_contrast", "raw_local_contrast_radial"), default="raw"
     )
     args = parser.parse_args()
     started = time.perf_counter()
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    in_channels = 1 if args.input_mode == "raw" else 2
+    in_channels = input_channel_count(args.input_mode)
     model = FilamentUNet(in_channels=in_channels).to(device)
     if device.type == "cuda":
         model.to(memory_format=torch.channels_last)

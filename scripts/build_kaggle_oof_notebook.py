@@ -1,3 +1,6 @@
+# Copyright (C) 2026 EquiNexus contributors
+# SPDX-License-Identifier: AGPL-3.0-only
+
 from __future__ import annotations
 
 import base64
@@ -25,7 +28,7 @@ def _cell(cell_type: str, source: str) -> dict[str, Any]:
 
 
 def build(*, input_mode: str = "raw") -> tuple[Path, Path]:
-    if input_mode not in ("raw", "raw_local_contrast"):
+    if input_mode not in ("raw", "raw_local_contrast", "raw_local_contrast_radial"):
         raise ValueError(f"Unsupported OOF input mode: {input_mode}")
     paths = [
         *sorted((REPO_ROOT / "src" / "filament_baseline").glob("*.py")),
@@ -159,7 +162,7 @@ if __name__ == "__main__":
         description="Build the Kaggle consensus OOF notebook for a selected input mode."
     )
     parser.add_argument(
-        "--input-mode", choices=("raw", "raw_local_contrast"), default="raw"
+        "--input-mode", choices=("raw", "raw_local_contrast", "raw_local_contrast_radial"), default="raw"
     )
     options = parser.parse_args()
     build(input_mode=options.input_mode)

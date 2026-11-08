@@ -14,7 +14,7 @@ checkpoints/
 submission*.csv
 
 # Python environments and caches
-.venv/
+.venv*/
 venv/
 .cache/
 .tmp/

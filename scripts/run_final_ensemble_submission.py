@@ -1,3 +1,6 @@
+# Copyright (C) 2026 EquiNexus contributors
+# SPDX-License-Identifier: AGPL-3.0-only
+
 from __future__ import annotations
 
 import argparse
@@ -26,7 +29,7 @@ if __name__ == "__main__":
     parser.add_argument("--first-patch-size", type=int, default=1_024)
     parser.add_argument("--first-tta", type=int, choices=(1, 2, 4, 8), default=2)
     parser.add_argument(
-        "--first-input-mode", choices=("raw", "raw_local_contrast"), default="raw"
+        "--first-input-mode", choices=("raw", "raw_local_contrast", "raw_local_contrast_radial"), default="raw"
     )
     parser.add_argument("--second-name", default="consensus512")
     parser.add_argument("--second-target-mode", choices=("annotator", "consensus"), default="consensus")
@@ -35,7 +38,7 @@ if __name__ == "__main__":
     parser.add_argument("--second-patch-size", type=int, default=512)
     parser.add_argument("--second-tta", type=int, choices=(1, 2, 4, 8), default=4)
     parser.add_argument(
-        "--second-input-mode", choices=("raw", "raw_local_contrast"), default="raw"
+        "--second-input-mode", choices=("raw", "raw_local_contrast", "raw_local_contrast_radial"), default="raw"
     )
     parser.add_argument("--first-weight", type=float, default=0.5)
     parser.add_argument("--foreground-threshold", type=float, required=True)

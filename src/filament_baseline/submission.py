@@ -1,3 +1,6 @@
+# Copyright (C) 2026 EquiNexus contributors
+# SPDX-License-Identifier: AGPL-3.0-only
+
 from __future__ import annotations
 
 import csv
@@ -16,7 +19,8 @@ from .data import IMAGE_SIZE, inventory, load_dataset
 from .features import InputMode
 from .inference import InstanceConfig, instances_from_probabilities, predict_probabilities
 from .learning import FilamentPatchDataset, TargetMode
-from .model_runner import _is_kaggle_runtime, _load_model, _within
+from .model_runner import _file_sha256, _is_kaggle_runtime, _load_model, _within
+from .model import DINO_V2_REPOSITORY
 from .predictor import decode_rle, read_grayscale
 from .runner import _git_status, _resolve_data_root, _write_predictions
 from .runtime import hardware_info, package_versions
@@ -84,6 +88,10 @@ def run_final_submission(
     steps: int = 5_000,
     batch_size: int = 2,
     patch_size: int = 512,
+    base_channels: int = 16,
+    model_type: str = "unet",
+    pretrained_backbone: bool = False,
+    hub_repository: str = DINO_V2_REPOSITORY,
     tta: int = 1,
     input_mode: InputMode = "raw",
     foreground_threshold: float = 0.45,
@@ -108,6 +116,11 @@ def run_final_submission(
     if not kaggle_runtime and not _within(run_root, repo_root):
         raise ValueError(f"Local outputs must stay in the repository: {run_root}")
     run_root.mkdir(parents=True, exist_ok=True)
+    hub_dir = (
+        Path("/kaggle/working/equinexus/pretrained/torch/hub")
+        if kaggle_runtime
+        else repo_root / "artifacts" / "pretrained" / "torch" / "hub"
+    )
     repo_info = _git_status(repo_root)
 
     config_json = json.loads(
@@ -145,12 +158,33 @@ def run_final_submission(
         output_path=checkpoint_path,
         steps=steps,
         batch_size=batch_size,
+        base_channels=base_channels,
         seed=int(config_json["seed"]),
         validation_interval=max(100, min(500, steps // 5)),
+        model_type=model_type,
+        pretrained_backbone=pretrained_backbone,
+        hub_repository=hub_repository,
+        hub_dir=hub_dir,
     )
 
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    model = _load_model(checkpoint_path, device)
+    model = _load_model(checkpoint_path, device, hub_dir=hub_dir)
+    pretrained_checkpoint = hub_dir / "checkpoints" / "dinov2_vits14_pretrain.pth"
+    pretrained_checkpoint_sha256 = (
+        _file_sha256(pretrained_checkpoint)
+        if model_type == "dinov2_vits14" and pretrained_backbone
+        else None
+    )
+    adaptation_metadata = None
+    adaptation_metadata_path = pretrained_checkpoint.with_suffix(".json")
+    if (
+        model_type == "dinov2_vits14"
+        and pretrained_backbone
+        and adaptation_metadata_path.is_file()
+    ):
+        candidate_adaptation = json.loads(adaptation_metadata_path.read_text(encoding="utf-8"))
+        if candidate_adaptation.get("adapted_checkpoint_sha256") == pretrained_checkpoint_sha256:
+            adaptation_metadata = candidate_adaptation
     instance_config = InstanceConfig(
         foreground_threshold=foreground_threshold,
         boundary_threshold=boundary_threshold,
@@ -226,14 +260,30 @@ def run_final_submission(
         },
         "training": {**training, "training_observations": len(train_names)},
         "method": {
-            "architecture": "from_scratch_five_level_unet_foreground_boundary",
+            "architecture": (
+                "dinov2_vits14_frozen_backbone_cnn_decoder_foreground_boundary"
+                if model_type == "dinov2_vits14"
+                else "from_scratch_five_level_unet_foreground_boundary"
+            ),
+            "model_type": model_type,
             "target_mode": target_mode,
             "patch_size": patch_size,
+            "base_channels": base_channels,
             "input_mode": input_mode,
             "steps": steps,
             "batch_size": batch_size,
             "tta": tta,
             "instance_config": instance_config.__dict__,
+            "pretrained_backbone": pretrained_backbone,
+            "pretrained_backbone_repository": hub_repository if pretrained_backbone else None,
+            "pretrained_backbone_license": "Apache-2.0"
+            if model_type == "dinov2_vits14" and pretrained_backbone
+            else None,
+            "pretrained_backbone_checkpoint_sha256": pretrained_checkpoint_sha256,
+            "pretraining_data": "DINOv2 LVD-142M, self-supervised without labels"
+            if pretrained_backbone
+            else None,
+            "external_unlabeled_data": adaptation_metadata,
             "external_supervised_weights": False,
         },
         "test_validation": validation,

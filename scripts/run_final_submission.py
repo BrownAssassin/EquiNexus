@@ -1,3 +1,6 @@
+# Copyright (C) 2026 EquiNexus contributors
+# SPDX-License-Identifier: AGPL-3.0-only
+
 from __future__ import annotations
 
 import argparse
@@ -9,6 +12,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
 from filament_baseline.submission import run_final_submission  # noqa: E402
+from filament_baseline.model import DINO_V2_REPOSITORY  # noqa: E402
 
 
 if __name__ == "__main__":
@@ -22,9 +26,13 @@ if __name__ == "__main__":
     parser.add_argument("--steps", type=int, default=5_000)
     parser.add_argument("--batch-size", type=int, default=2)
     parser.add_argument("--patch-size", type=int, default=512)
+    parser.add_argument("--base-channels", type=int, default=16)
+    parser.add_argument("--model-type", choices=("unet", "dinov2_vits14"), default="unet")
+    parser.add_argument("--pretrained-backbone", action="store_true")
+    parser.add_argument("--hub-repository", default=DINO_V2_REPOSITORY)
     parser.add_argument("--tta", type=int, choices=(1, 2, 4, 8), default=1)
     parser.add_argument(
-        "--input-mode", choices=("raw", "raw_local_contrast"), default="raw"
+        "--input-mode", choices=("raw", "raw_local_contrast", "raw_local_contrast_radial"), default="raw"
     )
     parser.add_argument("--foreground-threshold", type=float, default=0.45)
     parser.add_argument("--boundary-threshold", type=float, default=0.65)
@@ -41,6 +49,10 @@ if __name__ == "__main__":
         steps=args.steps,
         batch_size=args.batch_size,
         patch_size=args.patch_size,
+        base_channels=args.base_channels,
+        model_type=args.model_type,
+        pretrained_backbone=args.pretrained_backbone,
+        hub_repository=args.hub_repository,
         tta=args.tta,
         input_mode=args.input_mode,
         foreground_threshold=args.foreground_threshold,

@@ -1,3 +1,6 @@
+# Copyright (C) 2026 EquiNexus contributors
+# SPDX-License-Identifier: AGPL-3.0-only
+
 from __future__ import annotations
 
 import csv
@@ -59,6 +62,7 @@ def _fit_and_cache_member(
     patch_size = int(member["patch_size"])
     batch_size = int(member["batch_size"])
     steps = int(member["steps"])
+    base_channels = int(member.get("base_channels", 16))
     tta = int(member["tta"])
     input_mode: InputMode = member.get("input_mode", "raw")
     if target_mode not in ("annotator", "consensus"):
@@ -83,6 +87,7 @@ def _fit_and_cache_member(
         output_path=checkpoint_path,
         steps=steps,
         batch_size=batch_size,
+        base_channels=base_channels,
         seed=seed,
         validation_interval=max(100, min(500, steps // 5)),
     )
@@ -127,6 +132,7 @@ def _fit_and_cache_member(
             "steps": steps,
             "batch_size": batch_size,
             "patch_size": patch_size,
+            "base_channels": base_channels,
             "tta": tta,
             "input_mode": input_mode,
             "seed": seed,

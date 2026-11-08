@@ -4,7 +4,7 @@ Working repository for the [Solar Filament Segmentation Challenge 2026](https://
 
 **Team:** Arv Bali and Thai Le
 
-**Current phase:** scorer-aligned validation baseline
+**Current phase:** grouped validation, model comparison, and submission selection
 
 ## Challenge
 
@@ -14,7 +14,7 @@ Use Kaggle for attached competition data and larger GPU runs. The local RTX 5070
 
 ## Kaggle-first workflow
 
-1. Use only competition-provided ground-truth annotations. Keep all local data under the ignored data/ folder.
+1. Rule 6 permits qualifying external datasets, labels, and models that are publicly and equally accessible at no cost or reasonably accessible at minimal cost, subject to each source's use conditions and the host's limits. The host clarified that MAGFiLO annotations used as ground truth must be limited to those provided through this competition; independent external annotations remain eligible under Rule 6. Do not use public MAGFiLO annotations outside the supplied competition training set. Final test inference reads only the supplied H-alpha images. Record source, license or use terms, and role for every external asset. Keep local data under the ignored data/ folder.
 2. Use the shared src/ implementation on the laptop and in Kaggle notebooks. Record the source commit and runtime details for every run.
 3. Keep validation splits grouped by original observation so alternate annotator records cannot cross between train and validation.
 4. Use the local RTX 5070 for small or patch-based model experiments; use Kaggle GPU sessions for larger runs and competition data access.
@@ -37,6 +37,10 @@ requirements.txt
 ## Required final materials
 
 The organizers request a four-page technical report, a publicly accessible Git repository, pinned dependencies, and a Jupyter notebook that illustrates the complete pipeline and reproduces predictions using competition data.
+
+## License
+
+Unless a file states otherwise, EquiNexus source code and notebooks are licensed under the GNU Affero General Public License version 3. See [LICENSE](LICENSE). Copyright (C) 2026 EquiNexus contributors. Third-party software, pretrained weights, external datasets, and competition materials retain their own license and use terms; local data and generated artifacts are excluded from this repository.
 
 See the [competition overview](https://www.kaggle.com/competitions/filament-segmentation-2026/overview), [data tab](https://www.kaggle.com/competitions/filament-segmentation-2026/data), [rules](https://www.kaggle.com/competitions/filament-segmentation-2026/rules), and [organizers' self-evaluation notebook](https://www.kaggle.com/code/azimahmadzadeh/self-evaluation-notebook).
 

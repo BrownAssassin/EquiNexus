@@ -5,4 +5,5 @@ scikit-learn==1.9.1
 scipy==1.18.1
 scikit-image==0.25.2
 matplotlib==3.11.2
+Pillow==13.0.0
 pycocotools==2.0.11

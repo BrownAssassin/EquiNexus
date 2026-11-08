@@ -1,3 +1,6 @@
+# Copyright (C) 2026 EquiNexus contributors
+# SPDX-License-Identifier: AGPL-3.0-only
+
 from __future__ import annotations
 
 import csv
@@ -16,6 +19,7 @@ from .data import inventory, load_dataset
 from .features import InputMode
 from .inference import InstanceConfig, instances_from_probabilities, predict_probabilities
 from .learning import FilamentPatchDataset, TargetMode
+from .model import DINO_V2_REPOSITORY, model_architecture
 from .model_runner import _load_model
 from .predictor import PredictedInstance, read_grayscale
 from .runner import (
@@ -46,6 +50,14 @@ def _save_probability_cache(
     )
 
 
+def _file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for block in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
 def run_training_partition_oof(
     *,
     repo_root: str | Path,
@@ -56,13 +68,35 @@ def run_training_partition_oof(
     steps: int = 5_000,
     batch_size: int = 2,
     patch_size: int = 512,
+    base_channels: int = 16,
+    model_type: str = "unet",
+    pretrained_backbone: bool = False,
+    hub_repository: str = DINO_V2_REPOSITORY,
     tta: int = 1,
     input_mode: InputMode = "raw",
     instance_config: InstanceConfig | None = None,
+    initial_weights: str | Path | None = None,
+    external_pretraining: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     if folds < 2:
         raise ValueError("At least two OOF folds are required")
     repo_root = Path(repo_root).resolve()
+    initial_weights_path = (
+        Path(initial_weights).expanduser().resolve() if initial_weights is not None else None
+    )
+    if initial_weights_path is not None:
+        if not initial_weights_path.is_file():
+            raise FileNotFoundError(f"Initial OOF checkpoint does not exist: {initial_weights_path}")
+        kaggle_runtime = bool(os.environ.get("KAGGLE_KERNEL_RUN_TYPE")) or (
+            Path("/kaggle/input").is_dir() and Path("/kaggle/working").is_dir()
+        )
+        allowed_roots = [repo_root]
+        if kaggle_runtime:
+            allowed_roots.extend((Path("/kaggle/input"), Path("/kaggle/working")))
+        if not any(
+            initial_weights_path.is_relative_to(root.resolve()) for root in allowed_roots
+        ):
+            raise ValueError("Initial OOF checkpoints must remain inside the workspace or Kaggle paths")
     dataset = load_dataset(_resolve_data_root(data_root, repo_root))
     inventory_info = inventory(dataset)
     if inventory_info["observation_count"] != 707:
@@ -139,6 +173,14 @@ def run_training_partition_oof(
 
     run_root = repo_root / "artifacts" / "oof-experiments" / run_name
     run_root.mkdir(parents=True, exist_ok=True)
+    kaggle_runtime = bool(os.environ.get("KAGGLE_KERNEL_RUN_TYPE")) or (
+        Path("/kaggle/input").is_dir() and Path("/kaggle/working").is_dir()
+    )
+    hub_dir = (
+        Path("/kaggle/working/EquiNexus/artifacts/pretrained/torch/hub")
+        if kaggle_runtime
+        else repo_root / "artifacts" / "pretrained" / "torch" / "hub"
+    )
     repository_info = _git_status(repo_root)
     if os.environ.get("EQUINEXUS_SOURCE_COMMIT"):
         repository_info["commit"] = os.environ["EQUINEXUS_SOURCE_COMMIT"]
@@ -192,15 +234,21 @@ def run_training_partition_oof(
             output_path=checkpoint_path,
             steps=steps,
             batch_size=batch_size,
+            base_channels=base_channels,
             seed=int(validation_config["seed"]) + fold_index,
             validation_interval=max(100, min(500, steps // 5)),
+            model_type=model_type,
+            pretrained_backbone=pretrained_backbone,
+            hub_repository=hub_repository,
+            hub_dir=hub_dir,
+            initial_weights=initial_weights_path,
         )
         total_training_seconds += float(training_result["elapsed_seconds"])
         peak_gpu_memory = max(
             peak_gpu_memory, int(training_result["peak_gpu_memory_bytes"])
         )
 
-        model = _load_model(checkpoint_path, device)
+        model = _load_model(checkpoint_path, device, hub_dir=hub_dir)
         fold_predictions: dict[str, list[PredictedInstance]] = {}
         inference_started = time.perf_counter()
         for index, file_name in enumerate(fold_validation_names, start=1):
@@ -316,9 +364,14 @@ def run_training_partition_oof(
         "configuration_sha256": validation_config_sha256,
         "dataset_inventory": inventory_info,
         "data_boundary": {
-            "training_labels": "competition-provided training annotations only",
+            "training_labels": (
+                "competition-provided training annotations plus separately licensed external "
+                "supervised pretraining labels"
+                if external_pretraining is not None
+                else "competition-provided training annotations only"
+            ),
             "excluded_holdout": "all 142 observations in the frozen validation manifest",
-            "external_ground_truth": False,
+            "external_ground_truth": external_pretraining is not None,
         },
         "splits": {
             "frozen_holdout_sha256": frozen_split.sha256,
@@ -328,15 +381,29 @@ def run_training_partition_oof(
             "fold_count": folds,
         },
         "method": {
-            "architecture": "from_scratch_five_level_unet_foreground_boundary",
+            "architecture": model_architecture(model_type),
+            "model_type": model_type,
             "target_mode": target_mode,
             "patch_size": patch_size,
+                "base_channels": base_channels,
             "input_mode": input_mode,
             "steps_per_fold": steps,
             "batch_size": batch_size,
             "tta": tta,
             "instance_config": candidate_config.__dict__,
-            "external_supervised_weights": False,
+            "pretrained_backbone": pretrained_backbone,
+            "pretrained_backbone_repository": (
+                hub_repository
+                if pretrained_backbone and model_type == "dinov2_vits14"
+                else "smp-hub/resnet34.imagenet@7a57b34f723329ff020b3f8bc41771163c519d0c"
+                if pretrained_backbone and model_type == "smp_unet_resnet34"
+                else None
+            ),
+            "external_supervised_weights": initial_weights_path is not None,
+            "external_supervised_checkpoint_sha256": (
+                _file_sha256(initial_weights_path) if initial_weights_path is not None else None
+            ),
+            "external_supervised_pretraining": external_pretraining,
         },
         "folds": fold_results,
         "aggregate_oof": aggregate_global,

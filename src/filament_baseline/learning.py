@@ -1,3 +1,6 @@
+# Copyright (C) 2026 EquiNexus contributors
+# SPDX-License-Identifier: AGPL-3.0-only
+
 from __future__ import annotations
 
 import random
@@ -11,7 +14,7 @@ import torch
 from torch.utils.data import Dataset
 
 from .data import CompetitionDataset, ImageView
-from .features import InputMode, prepare_input_channels
+from .features import InputMode, input_channel_count, prepare_input_channels
 
 TargetMode = Literal["annotator", "consensus"]
 
@@ -132,14 +135,13 @@ class FilamentPatchDataset(Dataset[tuple[torch.Tensor, torch.Tensor]]):
         self.records = records_for_observations(dataset, observations, target_mode)
         self.target_mode = target_mode
         self.image_dir = dataset.train_image_dir
+        self.image_resize_to = dataset.image_resize_to
         self.patch_size = patch_size
         self.positive_fraction = positive_fraction
         self.augment = augment
         self.seed = seed
-        if input_mode not in ("raw", "raw_local_contrast"):
-            raise ValueError(f"Unsupported input mode: {input_mode}")
         self.input_mode = input_mode
-        self.in_channels = 1 if input_mode == "raw" else 2
+        self.in_channels = input_channel_count(input_mode)
         self.epoch = 0
         self.image_cache_size = image_cache_size
         self._image_cache: OrderedDict[
@@ -162,18 +164,23 @@ class FilamentPatchDataset(Dataset[tuple[torch.Tensor, torch.Tensor]]):
             self._image_cache.move_to_end(file_name)
             return cached
         image = cv2.imread(str(self.image_dir / file_name), cv2.IMREAD_GRAYSCALE)
-        if image is None or image.shape != (2048, 2048):
+        if image is None:
+            raise FileNotFoundError(f"Could not read a training image: {file_name}")
+        if image.shape != (2048, 2048) and self.image_resize_to is not None:
+            height, width = self.image_resize_to
+            image = cv2.resize(image, (width, height), interpolation=cv2.INTER_AREA)
+        if image.shape != (2048, 2048):
             raise FileNotFoundError(f"Could not read a 2048x2048 training image: {file_name}")
         scaled = image.astype(np.float32) / 255.0
         disk_values = scaled[self._disk > 0]
         mean = float(np.mean(disk_values))
         std = float(np.std(disk_values))
-        contrast = (
-            prepare_input_channels(image, self.input_mode)[1]
-            if self.input_mode == "raw_local_contrast"
+        auxiliary_channels = (
+            prepare_input_channels(image, self.input_mode)[1:]
+            if self.in_channels > 1
             else None
         )
-        cached = (image, mean, max(std, 1e-3), contrast)
+        cached = (image, mean, max(std, 1e-3), auxiliary_channels)
         self._image_cache[file_name] = cached
         while len(self._image_cache) > self.image_cache_size:
             self._image_cache.popitem(last=False)
@@ -200,12 +207,14 @@ class FilamentPatchDataset(Dataset[tuple[torch.Tensor, torch.Tensor]]):
     def __getitem__(self, index: int) -> tuple[torch.Tensor, torch.Tensor]:
         record = self.records[index]
         rng = random.Random(self.seed + self.epoch * 1_000_003 + index * 97)
-        image, mean, std, contrast = self._image_and_stats(record.file_name)
+        image, mean, std, auxiliary_channels = self._image_and_stats(record.file_name)
         x0, y0 = self._crop_origin(record, rng)
         x1, y1 = x0 + self.patch_size, y0 + self.patch_size
         image_crop = image[y0:y1, x0:x1].astype(np.float32) / 255.0
-        contrast_crop = (
-            contrast[y0:y1, x0:x1].copy() if contrast is not None else None
+        auxiliary_crop = (
+            auxiliary_channels[:, y0:y1, x0:x1].copy()
+            if auxiliary_channels is not None
+            else None
         )
 
         per_view_foreground = []
@@ -221,20 +230,20 @@ class FilamentPatchDataset(Dataset[tuple[torch.Tensor, torch.Tensor]]):
         if self.augment:
             turns = rng.randrange(4)
             image_crop = np.rot90(image_crop, turns).copy()
-            if contrast_crop is not None:
-                contrast_crop = np.rot90(contrast_crop, turns).copy()
+            if auxiliary_crop is not None:
+                auxiliary_crop = np.rot90(auxiliary_crop, turns, axes=(-2, -1)).copy()
             target_foreground = np.rot90(target_foreground, turns).copy()
             target_boundary = np.rot90(target_boundary, turns).copy()
             if rng.random() < 0.5:
                 image_crop = np.fliplr(image_crop).copy()
-                if contrast_crop is not None:
-                    contrast_crop = np.fliplr(contrast_crop).copy()
+                if auxiliary_crop is not None:
+                    auxiliary_crop = np.flip(auxiliary_crop, axis=-1).copy()
                 target_foreground = np.fliplr(target_foreground).copy()
                 target_boundary = np.fliplr(target_boundary).copy()
             if rng.random() < 0.5:
                 image_crop = np.flipud(image_crop).copy()
-                if contrast_crop is not None:
-                    contrast_crop = np.flipud(contrast_crop).copy()
+                if auxiliary_crop is not None:
+                    auxiliary_crop = np.flip(auxiliary_crop, axis=-2).copy()
                 target_foreground = np.flipud(target_foreground).copy()
                 target_boundary = np.flipud(target_boundary).copy()
             image_crop = np.power(
@@ -248,8 +257,10 @@ class FilamentPatchDataset(Dataset[tuple[torch.Tensor, torch.Tensor]]):
 
         normalized = np.clip((image_crop - mean) / std, -5.0, 5.0)
         input_channels = [normalized.astype(np.float32)]
-        if contrast_crop is not None:
-            input_channels.append(contrast_crop.astype(np.float32))
+        if auxiliary_crop is not None:
+            input_channels.extend(
+                channel.astype(np.float32) for channel in auxiliary_crop
+            )
         image_tensor = torch.from_numpy(np.stack(input_channels))
         target_tensor = torch.from_numpy(
             np.stack((target_foreground, target_boundary)).astype(np.float32)

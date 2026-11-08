@@ -1,3 +1,6 @@
+# Copyright (C) 2026 EquiNexus contributors
+# SPDX-License-Identifier: AGPL-3.0-only
+
 from __future__ import annotations
 
 import sys
@@ -18,7 +21,7 @@ from filament_baseline.inference import (  # noqa: E402
     instances_from_probabilities,
 )
 from filament_baseline.features import prepare_input_channels  # noqa: E402
-from filament_baseline.model import FilamentUNet  # noqa: E402
+from filament_baseline.model import FilamentUNet, model_architecture  # noqa: E402
 from filament_baseline.classical import ClassicalConfig, predictions_from_zmap  # noqa: E402
 from filament_baseline.predictor import (  # noqa: E402
     decode_rle,
@@ -30,6 +33,20 @@ from filament_baseline.training import train_model  # noqa: E402
 
 
 class ModelTests(unittest.TestCase):
+    def test_model_architecture_metadata_identifies_each_model(self) -> None:
+        self.assertEqual(
+            model_architecture("unet"),
+            "from_scratch_five_level_unet_foreground_boundary",
+        )
+        self.assertEqual(
+            model_architecture("smp_unet_resnet34"),
+            "smp_unet_resnet34_foreground_boundary",
+        )
+        self.assertEqual(
+            model_architecture("dinov2_vits14"),
+            "dinov2_vits14_frozen_backbone_cnn_decoder_foreground_boundary",
+        )
+
     def test_raw_local_contrast_features_are_normalized_two_channel_inputs(self) -> None:
         gray = np.full((2048, 2048), 128, dtype=np.uint8)
         gray[990:996, 700:1300] = 90
@@ -37,6 +54,16 @@ class ModelTests(unittest.TestCase):
         self.assertEqual(tuple(channels.shape), (2, 2048, 2048))
         self.assertTrue(np.isfinite(channels).all())
         self.assertGreater(float(channels[1].max()), float(channels[1].min()))
+
+    def test_radial_contrast_features_are_finite_three_channel_inputs(self) -> None:
+        yy, xx = np.ogrid[:2048, :2048]
+        radius = np.sqrt((yy - 1023) ** 2 + (xx - 1023) ** 2)
+        gray = np.clip(180 - radius * 0.05, 0, 255).astype(np.uint8)
+        gray[990:996, 700:1300] = 90
+        channels = prepare_input_channels(gray, "raw_local_contrast_radial")
+        self.assertEqual(tuple(channels.shape), (3, 2048, 2048))
+        self.assertTrue(np.isfinite(channels).all())
+        self.assertGreater(float(channels[2, 990:996, 700:1300].mean()), 0.0)
 
     def test_dihedral_tta_transforms_are_invertible_and_unique(self) -> None:
         source = torch.arange(35).reshape(1, 1, 5, 7)

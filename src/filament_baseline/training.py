@@ -1,3 +1,6 @@
+# Copyright (C) 2026 EquiNexus contributors
+# SPDX-License-Identifier: AGPL-3.0-only
+
 from __future__ import annotations
 
 import json
@@ -12,7 +15,7 @@ import torch
 from torch.utils.data import DataLoader
 
 from .learning import FilamentPatchDataset, TargetMode, training_loss
-from .model import FilamentUNet
+from .model import DINO_V2_REPOSITORY, build_filament_model
 
 
 def seed_everything(seed: int) -> None:
@@ -26,7 +29,7 @@ def seed_everything(seed: int) -> None:
 
 @torch.no_grad()
 def evaluate_patch_dice(
-    model: FilamentUNet,
+    model: torch.nn.Module,
     loader: DataLoader,
     device: torch.device,
     *,
@@ -65,17 +68,60 @@ def train_model(
     seed: int = 42,
     validation_interval: int = 500,
     gradient_accumulation: int = 1,
+    base_channels: int = 16,
+    model_type: str = "unet",
+    pretrained_backbone: bool = False,
+    hub_repository: str = DINO_V2_REPOSITORY,
+    hub_dir: str | Path | None = None,
+    initial_weights: str | Path | None = None,
 ) -> dict[str, Any]:
-    if steps < 1 or batch_size < 1 or gradient_accumulation < 1:
-        raise ValueError("steps, batch_size, and gradient_accumulation must be positive")
+    if steps < 1 or batch_size < 1 or gradient_accumulation < 1 or base_channels < 1:
+        raise ValueError(
+            "steps, batch_size, gradient_accumulation, and base_channels must be positive"
+        )
     seed_everything(seed)
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     input_channels = int(getattr(train_dataset, "in_channels", 1))
-    model = FilamentUNet(in_channels=input_channels).to(device)
+    if model_type == "dinov2_vits14":
+        patch_size = int(getattr(train_dataset, "patch_size", 0))
+        if patch_size % 224:
+            raise ValueError(
+                f"DINOv2 patch size must be divisible by 224, received {patch_size}"
+            )
+    if hub_dir is not None:
+        Path(hub_dir).mkdir(parents=True, exist_ok=True)
+        torch.hub.set_dir(str(hub_dir))
+    model = build_filament_model(
+        model_type=model_type,
+        in_channels=input_channels,
+        base_channels=base_channels,
+        pretrained_backbone=pretrained_backbone,
+        hub_repository=hub_repository,
+    ).to(device)
+    if initial_weights is not None:
+        initial_path = Path(initial_weights).expanduser().resolve()
+        if not initial_path.is_file():
+            raise FileNotFoundError(f"Initial model checkpoint does not exist: {initial_path}")
+        checkpoint = torch.load(initial_path, map_location="cpu", weights_only=True)
+        expected_config = {
+            "model_type": model_type,
+            "base_channels": base_channels,
+            "in_channels": input_channels,
+            "hub_repository": hub_repository,
+        }
+        if checkpoint.get("model_config") != expected_config:
+            raise ValueError(
+                "Initial checkpoint model configuration does not match the requested model: "
+                f"{checkpoint.get('model_config')} != {expected_config}"
+            )
+        model.load_state_dict(checkpoint["model"], strict=True)
+        print(f"Initialized model from {initial_path}", flush=True)
     if device.type == "cuda":
         model = model.to(memory_format=torch.channels_last)
     optimizer = torch.optim.AdamW(
-        model.parameters(), lr=learning_rate, weight_decay=weight_decay
+        (parameter for parameter in model.parameters() if parameter.requires_grad),
+        lr=learning_rate,
+        weight_decay=weight_decay,
     )
     warmup_steps = min(300, max(1, steps // 10))
 
@@ -181,8 +227,10 @@ def train_model(
                         {
                             "model": model.state_dict(),
                             "model_config": {
-                                "base_channels": 16,
+                                "model_type": model_type,
+                                "base_channels": base_channels,
                                 "in_channels": input_channels,
+                                "hub_repository": hub_repository,
                             },
                             "target_mode": train_dataset.target_mode,
                             "step": step,
@@ -200,6 +248,10 @@ def train_model(
         "history": str(history_path),
         "device": str(device),
         "steps": steps,
+        "base_channels": base_channels,
+        "model_type": model_type,
+        "pretrained_backbone": pretrained_backbone,
+        "hub_repository": hub_repository if model_type == "dinov2_vits14" else None,
         "seed": seed,
         "best_step": best_step,
         "best_validation_patch_dice": best_dice if best_dice >= 0.0 else None,

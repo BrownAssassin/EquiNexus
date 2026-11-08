@@ -1,3 +1,6 @@
+# Copyright (C) 2026 EquiNexus contributors
+# SPDX-License-Identifier: AGPL-3.0-only
+
 from __future__ import annotations
 
 import base64
@@ -33,7 +36,7 @@ def build(
     foreground_threshold: float = 0.65,
     boundary_threshold: float = 0.70,
 ) -> tuple[Path, Path]:
-    valid_input_modes = {"raw", "raw_local_contrast"}
+    valid_input_modes = {"raw", "raw_local_contrast", "raw_local_contrast_radial"}
     if first_input_mode not in valid_input_modes or second_input_mode not in valid_input_modes:
         raise ValueError("Unsupported final ensemble input mode")
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,63}", run_name):
@@ -173,10 +176,10 @@ if __name__ == "__main__":
         description="Build the Kaggle final-submission notebook with selected input modes."
     )
     parser.add_argument(
-        "--first-input-mode", choices=("raw", "raw_local_contrast"), default="raw"
+        "--first-input-mode", choices=("raw", "raw_local_contrast", "raw_local_contrast_radial"), default="raw"
     )
     parser.add_argument(
-        "--second-input-mode", choices=("raw", "raw_local_contrast"), default="raw"
+        "--second-input-mode", choices=("raw", "raw_local_contrast", "raw_local_contrast_radial"), default="raw"
     )
     parser.add_argument("--run-name", default="final-ensemble-v1")
     parser.add_argument("--foreground-threshold", type=float, default=0.65)
