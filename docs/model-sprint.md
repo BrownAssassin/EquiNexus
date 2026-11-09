@@ -427,3 +427,8 @@ The submission manifest and scores are recorded under ignored `artifacts/submiss
 - Averaging five cross-fitted random-forest seeds scored 0.424763 OOF versus 0.424791 for the current blend. The paired observation-bootstrap interval was [-0.000218, 0.000171], so the ensemble was not promoted.
 - Averaging five cross-fitted ExtraTrees seeds scored 0.424872 OOF, a +0.000081 point difference; its 95% paired interval [-0.000102, 0.000352] includes zero. The fixed holdout was not used, and neither ensemble changed the prepared five-candidate submission batch.
 - Both screens covered all 565 OOF observations under the frozen grouped split, used only competition training annotations, and ran CPU-only. Source scripts and detailed metrics are recorded in `docs/experiment-log.md` and ignored `artifacts/model-experiments/component-selector-*-seed-ensemble-20261109/` folders.
+
+## 2026-11-09 22:42 UTC cross-fold medoid association review
+
+- Adapted the public V23 cross-fold association and medoid idea using EquiNexus predictions only. On the frozen holdout it scored 0.369707 PQ versus 0.434930 for the incumbent; the paired 95% interval for the delta was [-0.077360, -0.052939]. Recall improved, but false positives nearly tripled, so the approach was rejected without test inference or submission.
+- The fixed split and scorer are unchanged. Full metrics, input hashes, per-observation diagnostics, and the reproduction script are recorded in `docs/experiment-log.md` and ignored `artifacts/model-experiments/crossfold-medoid-unet-fusion-20261109/`.
