@@ -1,0 +1,422 @@
+{
+  "candidates": [
+    {
+      "configuration": {
+        "closing_radius": 3,
+        "detection_threshold": 0.35,
+        "foreground_threshold": 0.5,
+        "grow_radius": 0,
+        "keep_unclaimed_minimum_area": 0,
+        "minimum_claimed_area": 200,
+        "solar_radius": 950
+      },
+      "oof_metrics": {
+        "fn": 2687,
+        "fp": 1950,
+        "pq": 0.41589232253350406,
+        "tp": 3801,
+        "tp_iou_sum": 2545.0530677437782
+      },
+      "rank": 1
+    },
+    {
+      "configuration": {
+        "closing_radius": 3,
+        "detection_threshold": 0.35,
+        "foreground_threshold": 0.5,
+        "grow_radius": 0,
+        "keep_unclaimed_minimum_area": 0,
+        "minimum_claimed_area": 100,
+        "solar_radius": 950
+      },
+      "oof_metrics": {
+        "fn": 2687,
+        "fp": 1967,
+        "pq": 0.4153154483916087,
+        "tp": 3801,
+        "tp_iou_sum": 2545.0530677437782
+      },
+      "rank": 2
+    },
+    {
+      "configuration": {
+        "closing_radius": 3,
+        "detection_threshold": 0.4,
+        "foreground_threshold": 0.5,
+        "grow_radius": 0,
+        "keep_unclaimed_minimum_area": 0,
+        "minimum_claimed_area": 200,
+        "solar_radius": 950
+      },
+      "oof_metrics": {
+        "fn": 2819,
+        "fp": 1693,
+        "pq": 0.4151389318277061,
+        "tp": 3669,
+        "tp_iou_sum": 2459.698171079159
+      },
+      "rank": 3
+    },
+    {
+      "configuration": {
+        "closing_radius": 3,
+        "detection_threshold": 0.35,
+        "foreground_threshold": 0.5,
+        "grow_radius": 0,
+        "keep_unclaimed_minimum_area": 0,
+        "minimum_claimed_area": 400,
+        "solar_radius": 950
+      },
+      "oof_metrics": {
+        "fn": 2705,
+        "fp": 1936,
+        "pq": 0.4151290085115118,
+        "tp": 3783,
+        "tp_iou_sum": 2533.739903450012
+      },
+      "rank": 4
+    },
+    {
+      "configuration": {
+        "closing_radius": 3,
+        "detection_threshold": 0.4,
+        "foreground_threshold": 0.5,
+        "grow_radius": 0,
+        "keep_unclaimed_minimum_area": 0,
+        "minimum_claimed_area": 100,
+        "solar_radius": 950
+      },
+      "oof_metrics": {
+        "fn": 2819,
+        "fp": 1704,
+        "pq": 0.4147539281812931,
+        "tp": 3669,
+        "tp_iou_sum": 2459.698171079159
+      },
+      "rank": 5
+    },
+    {
+      "configuration": {
+        "closing_radius": 3,
+        "detection_threshold": 0.4,
+        "foreground_threshold": 0.5,
+        "grow_radius": 0,
+        "keep_unclaimed_minimum_area": 0,
+        "minimum_claimed_area": 400,
+        "solar_radius": 950
+      },
+      "oof_metrics": {
+        "fn": 2834,
+        "fp": 1683,
+        "pq": 0.4144254283320324,
+        "tp": 3654,
+        "tp_iou_sum": 2450.2903450131416
+      },
+      "rank": 6
+    },
+    {
+      "configuration": {
+        "closing_radius": 3,
+        "detection_threshold": 0.3,
+        "foreground_threshold": 0.5,
+        "grow_radius": 0,
+        "keep_unclaimed_minimum_area": 0,
+        "minimum_claimed_area": 200,
+        "solar_radius": 950
+      },
+      "oof_metrics": {
+        "fn": 2582,
+        "fp": 2227,
+        "pq": 0.41402168637003595,
+        "tp": 3906,
+        "tp_iou_sum": 2612.683851838112
+      },
+      "rank": 7
+    },
+    {
+      "configuration": {
+        "closing_radius": 3,
+        "detection_threshold": 0.3,
+        "foreground_threshold": 0.5,
+        "grow_radius": 0,
+        "keep_unclaimed_minimum_area": 0,
+        "minimum_claimed_area": 100,
+        "solar_radius": 950
+      },
+      "oof_metrics": {
+        "fn": 2582,
+        "fp": 2247,
+        "pq": 0.4133666405882623,
+        "tp": 3906,
+        "tp_iou_sum": 2612.683851838112
+      },
+      "rank": 8
+    },
+    {
+      "configuration": {
+        "closing_radius": 3,
+        "detection_threshold": 0.3,
+        "foreground_threshold": 0.5,
+        "grow_radius": 0,
+        "keep_unclaimed_minimum_area": 0,
+        "minimum_claimed_area": 400,
+        "solar_radius": 950
+      },
+      "oof_metrics": {
+        "fn": 2607,
+        "fp": 2198,
+        "pq": 0.4132691161904024,
+        "tp": 3881,
+        "tp_iou_sum": 2596.7764915823936
+      },
+      "rank": 9
+    },
+    {
+      "configuration": {
+        "closing_radius": 3,
+        "detection_threshold": 0.25,
+        "foreground_threshold": 0.5,
+        "grow_radius": 0,
+        "keep_unclaimed_minimum_area": 0,
+        "minimum_claimed_area": 200,
+        "solar_radius": 950
+      },
+      "oof_metrics": {
+        "fn": 2500,
+        "fp": 2453,
+        "pq": 0.41239860192631633,
+        "tp": 3988,
+        "tp_iou_sum": 2665.950762152672
+      },
+      "rank": 10
+    },
+    {
+      "configuration": {
+        "closing_radius": 3,
+        "detection_threshold": 0.45,
+        "foreground_threshold": 0.5,
+        "grow_radius": 0,
+        "keep_unclaimed_minimum_area": 0,
+        "minimum_claimed_area": 200,
+        "solar_radius": 950
+      },
+      "oof_metrics": {
+        "fn": 2967,
+        "fp": 1476,
+        "pq": 0.41173603122629804,
+        "tp": 3521,
+        "tp_iou_sum": 2364.3941593170166
+      },
+      "rank": 11
+    },
+    {
+      "configuration": {
+        "closing_radius": 3,
+        "detection_threshold": 0.25,
+        "foreground_threshold": 0.5,
+        "grow_radius": 0,
+        "keep_unclaimed_minimum_area": 0,
+        "minimum_claimed_area": 100,
+        "solar_radius": 950
+      },
+      "oof_metrics": {
+        "fn": 2500,
+        "fp": 2477,
+        "pq": 0.41163448809583447,
+        "tp": 3988,
+        "tp_iou_sum": 2665.950762152672
+      },
+      "rank": 12
+    },
+    {
+      "configuration": {
+        "closing_radius": 3,
+        "detection_threshold": 0.25,
+        "foreground_threshold": 0.5,
+        "grow_radius": 0,
+        "keep_unclaimed_minimum_area": 0,
+        "minimum_claimed_area": 400,
+        "solar_radius": 950
+      },
+      "oof_metrics": {
+        "fn": 2528,
+        "fp": 2422,
+        "pq": 0.4114954758357335,
+        "tp": 3960,
+        "tp_iou_sum": 2647.973387002945
+      },
+      "rank": 13
+    },
+    {
+      "configuration": {
+        "closing_radius": 3,
+        "detection_threshold": 0.45,
+        "foreground_threshold": 0.5,
+        "grow_radius": 0,
+        "keep_unclaimed_minimum_area": 0,
+        "minimum_claimed_area": 100,
+        "solar_radius": 950
+      },
+      "oof_metrics": {
+        "fn": 2967,
+        "fp": 1485,
+        "pq": 0.411413634821127,
+        "tp": 3521,
+        "tp_iou_sum": 2364.3941593170166
+      },
+      "rank": 14
+    },
+    {
+      "configuration": {
+        "closing_radius": 3,
+        "detection_threshold": 0.45,
+        "foreground_threshold": 0.5,
+        "grow_radius": 0,
+        "keep_unclaimed_minimum_area": 0,
+        "minimum_claimed_area": 400,
+        "solar_radius": 950
+      },
+      "oof_metrics": {
+        "fn": 2976,
+        "fp": 1469,
+        "pq": 0.41130057959249333,
+        "tp": 3512,
+        "tp_iou_sum": 2358.603173673153
+      },
+      "rank": 15
+    }
+  ],
+  "crossfit_holdout_validation": {
+    "applies_to": "five-fold mean predictions from the 25:75 per-annotator/consensus U-Net probability blend and five-fold YOLO detector on the frozen holdout; this does not directly score the separate full-training refit checkpoints",
+    "configuration": {
+      "closing_radius": 3,
+      "detection_threshold": 0.35,
+      "foreground_threshold": 0.5,
+      "grow_radius": 0,
+      "keep_unclaimed_minimum_area": 0,
+      "minimum_claimed_area": 200,
+      "solar_radius": 950
+    },
+    "does_not_validate_full_training_refit": true,
+    "metrics": {
+      "annotator_view_count": 232,
+      "fn": 623,
+      "fp": 700,
+      "gt_instances_across_views": 1711,
+      "mean_observation_pq": 0.4046458895,
+      "median_observation_pq": 0.41621508900000004,
+      "observation_count": 142,
+      "pq": 0.4145338156114956,
+      "tp": 1088,
+      "tp_iou_sum": 725.2269104123116
+    },
+    "model_ensemble": {
+      "detector": "five-fold YOLO11s-seg at 1280 px with eight-view TTA and mask NMS IoU 0.30",
+      "detector_checkpoint_sha256": [
+        "78fb07f3ee6c00c59e2c56c55683f4d01d6687f3caee85ecc1ad06b258bcb993",
+        "c1e55f686f9c70855795ae43354dbbaee0e4496e7030bc05c2a27feddef5059c",
+        "55717bff692c98f5debd1d973f1445cd1534038bd4250ed4812e5c8b5867d2d3",
+        "655fd7792f9e6ced31b3b0b5e0b9d6b87ea192033dc1e37fadf533985d32b686",
+        "123da7e19403a0cd337538347c08a3ff88f537ad689124cd89ec525529b90ea4"
+      ],
+      "external_supervised_unet_weights": false,
+      "first_member": "annotator1024",
+      "first_member_weight": 0.25,
+      "second_member": "consensus512",
+      "second_member_weight": 0.75,
+      "unet_fold_checkpoint_sha256": [
+        "f519a5def2db499377be9ffb6ce8cc1decf13abb85551a2f311b38d5c6f7ed08",
+        "386fb9f53d096bf148c4fa1c75beac5c15330e5eba7bb8e9360701c2433d06be",
+        "4556bf0aa82005180f1f2cade5df4496e9b4b1fcc4e504967afbff81ff5772ef",
+        "dc573dee4cea800c6aff4cc48e8d678f1357c4bbd9de4928e24d2b8cae42050c",
+        "9457f4943d21cc465ecf52cd09e2ac6fc8f73123cef48a45c20c53dd62723a23"
+      ]
+    },
+    "provenance": {
+      "annotator1024_probability_manifest_sha256": "d26a9d57df5805599ad51899c6f26f9bcb865bcf87494f08c8102b26bec80619",
+      "consensus512_metrics_path": "artifacts/model-experiments/oof-consensus512-foldmean-valid-holdout/metrics.json",
+      "consensus512_metrics_sha256": "fd73b2cfc3c190b9fb3d9e7bc5da71ea6f7f134184461bd3bacdda1e5751d133",
+      "consensus512_probability_manifest_sha256": "712f2f30a017242ebb4f33c479aeef765ba527cb14bc475bd982a397a4ac5d91",
+      "detector_predictions_path": "artifacts/detector-experiments/yolo11s-seg-1280-oof-holdout-ensemble-tta8/dedup-iou-030/oof_detections.json",
+      "detector_predictions_sha256": "6a8905df9b4c583d75345551a2ab595cce350d98d5fcbce4c8d8e4cfc849c507",
+      "fusion_metrics_path": "artifacts/model-experiments/yolo11s-25perann-75consensus-foldmeans-valid-holdout-th035-a200/fusion-sweep.json",
+      "fusion_metrics_sha256": "f57030f6c17d78ede8884d70c25bca51cd7887ffb20abfe0769ea9d9cf28f0a0",
+      "per_observation_results_path": "artifacts/model-experiments/yolo11s-25perann-75consensus-foldmeans-valid-holdout-th035-a200/per_observation.csv"
+    },
+    "runtime": {
+      "fusion_scoring_seconds": 53.3054400999099,
+      "gpu": "NVIDIA GeForce RTX 5070 Laptop GPU",
+      "representative_peak_gpu_memory_bytes": 478724096,
+      "unet_holdout_inference_seconds": 760.485081300023
+    },
+    "selection_note": "The 0.35 detector threshold and 200-pixel minimum were ranked first in the 15-setting grouped OOF fusion screen before the independent cross-fit holdout score was computed. The fold-mean holdout models exclude the holdout; the separate all-observation refit has no direct holdout score.",
+    "split": {
+      "annotator_views": 232,
+      "every_unet_fold_excludes_the_holdout": true,
+      "frozen_holdout_sha256": "30cb2ec52437daf97e769a3a61bf83350062e6cf4f5d00af1f8399649065e48e",
+      "holdout_observations": 142,
+      "oof_manifest_sha256": "f856708222f5747cd35760932f535e4ae2752fd5161b9cd5981fbf4bbde26a3c",
+      "unet_fold_training_observations": 452,
+      "unet_fold_validation_observations": 113
+    },
+    "status": "valid_independent_crossfit_holdout"
+  },
+  "data_boundary": {
+    "test_inputs": "180 supplied competition H-alpha images only",
+    "test_labels_used": false,
+    "training_labels": "competition-provided training annotations only"
+  },
+  "holdout_confirmation": {
+    "prior_claim": {
+      "applies_to_rank": 1,
+      "detector_checkpoint_sha256": [
+        "78fb07f3ee6c00c59e2c56c55683f4d01d6687f3caee85ecc1ad06b258bcb993",
+        "c1e55f686f9c70855795ae43354dbbaee0e4496e7030bc05c2a27feddef5059c",
+        "55717bff692c98f5debd1d973f1445cd1534038bd4250ed4812e5c8b5867d2d3",
+        "655fd7792f9e6ced31b3b0b5e0b9d6b87ea192033dc1e37fadf533985d32b686",
+        "123da7e19403a0cd337538347c08a3ff88f537ad689124cd89ec525529b90ea4"
+      ],
+      "detector_predictions_sha256": "7115bfde20fb289684db088b7a57e457cb2ceeead3f6cfc70b55bf6e664d7c1f",
+      "fn": 636,
+      "fp": 702,
+      "fusion_configuration": {
+        "closing_radius": 3,
+        "detection_threshold": 0.35,
+        "foreground_threshold": 0.5,
+        "grow_radius": 0,
+        "keep_unclaimed_minimum_area": 0,
+        "solar_radius": 950
+      },
+      "pq": 0.4097760614657074,
+      "tp": 1075,
+      "unet_checkpoint_sha256": {
+        "annotator1024": "1de1e10d5842302318c16a6c9b000801246ff59442e442bfe7fb7077bf728177",
+        "consensus512": "57366e27b41812a9f925a189a562b4c7704aac1a143c7f84d122a07003456e7b"
+      }
+    },
+    "reason": "The two U-Net checkpoints used for this score were refit on all 707 competition training observations, including the 142-observation frozen holdout. The score is not independent validation evidence.",
+    "status": "invalidated"
+  },
+  "method": "YOLO11s-seg TTA8 plus two-member U-Net foreground fusion",
+  "model_ensemble": {
+    "detector": "YOLO11s-seg, five grouped folds, 1280 px, 40 epochs, COCO initialization",
+    "first_member": "annotator1024",
+    "first_member_weight": 0.25,
+    "second_member": "consensus512",
+    "test_mask_nms_iou": 0.3,
+    "test_tta": "eight rotations and reflections"
+  },
+  "oof_sources": {
+    "detector_predictions_sha256": "067e2becd9abbf5592e6f8bf0754442a06780f843aa85382e88e6da745a1172b",
+    "fusion_oof_screen_path": "artifacts/model-experiments/oof-fusion-weight25-postprocess-screen/fusion-oof-sweep.json",
+    "fusion_oof_screen_sha256": "888c4db915b0c76d8318c673f3b8ded5552adc10cc9eafa9b0bd9d61ef1de545",
+    "observations": 565,
+    "unet_predictions_path": "artifacts/oof-experiments/oof-blend-perann25-consensus75/oof-predictions.csv",
+    "unet_predictions_sha256": "ddb27c00be48d85830815c8b895242284fbcf7b97c4e934446daface15467829"
+  },
+  "schema_version": 1,
+  "split": {
+    "frozen_holdout_sha256": "30cb2ec52437daf97e769a3a61bf83350062e6cf4f5d00af1f8399649065e48e",
+    "oof_manifest_sha256": "f856708222f5747cd35760932f535e4ae2752fd5161b9cd5981fbf4bbde26a3c"
+  }
+}

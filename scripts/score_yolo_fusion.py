@@ -66,6 +66,10 @@ def main() -> int:
     parser.add_argument("--data-root", type=Path, default=None)
     parser.add_argument("--detector-predictions", type=Path, required=True)
     parser.add_argument("--probability-dir", type=Path, required=True)
+    parser.add_argument("--second-probability-dir", type=Path, default=None,
+                        help="optional second U-Net cache; maps are probability-averaged with the first cache")
+    parser.add_argument("--first-probability-weight", type=float, default=0.5,
+                        help="weight for --probability-dir when a second cache is supplied")
     parser.add_argument("--disk-geometry-json", type=Path, default=None,
                         help="optional image-derived {stem: {cx, cy, radius}} map")
     parser.add_argument("--disk-shrink", type=float, default=0.98,
@@ -94,6 +98,11 @@ def main() -> int:
     )
     detections_path = args.detector_predictions.expanduser().resolve()
     probability_dir = args.probability_dir.expanduser().resolve()
+    second_probability_dir = (
+        args.second_probability_dir.expanduser().resolve()
+        if args.second_probability_dir
+        else None
+    )
     output_dir = args.output_dir.expanduser().resolve()
     for label, path in (("data", data_root), ("detector predictions", detections_path),
                         ("probability cache", probability_dir), ("output", output_dir)):
@@ -101,6 +110,13 @@ def main() -> int:
             raise ValueError(f"Local {label} must remain inside the repository: {path}")
     if not detections_path.is_file() or not probability_dir.is_dir():
         raise FileNotFoundError("Missing detector predictions or U-Net probability cache")
+    if second_probability_dir is not None:
+        if not second_probability_dir.is_dir():
+            raise FileNotFoundError(f"Missing second U-Net probability cache: {second_probability_dir}")
+        if not second_probability_dir.is_relative_to(repo_root):
+            raise ValueError(f"Second probability cache must remain inside the repository: {second_probability_dir}")
+        if not 0.0 <= args.first_probability_weight <= 1.0:
+            raise ValueError("first-probability-weight must be between zero and one")
     geometry_path = args.disk_geometry_json.expanduser().resolve() if args.disk_geometry_json else None
     if geometry_path is not None and not geometry_path.is_relative_to(repo_root / "artifacts"):
         raise ValueError(f"Disk geometry must remain under artifacts: {geometry_path}")
@@ -153,6 +169,18 @@ def main() -> int:
         with np.load(cache_path) as cache:
             foreground = cache["foreground"].astype(np.float32)
             boundary = cache["boundary"].astype(np.float32)
+        if second_probability_dir is not None:
+            second_cache_path = second_probability_dir / f"{Path(file_name).stem}.npz"
+            if not second_cache_path.is_file():
+                raise FileNotFoundError(f"Missing second U-Net probabilities: {second_cache_path}")
+            with np.load(second_cache_path) as cache:
+                second_foreground = cache["foreground"].astype(np.float32)
+                second_boundary = cache["boundary"].astype(np.float32)
+            if second_foreground.shape != foreground.shape or second_boundary.shape != boundary.shape:
+                raise ValueError(f"Probability cache shape mismatch for {file_name}")
+            second_weight = 1.0 - args.first_probability_weight
+            foreground = args.first_probability_weight * foreground + second_weight * second_foreground
+            boundary = args.first_probability_weight * boundary + second_weight * second_boundary
         probability_maps[file_name] = foreground
         baseline_predictions[file_name] = instances_from_probabilities(
             foreground,
@@ -234,6 +262,14 @@ def main() -> int:
         ),
         "detector_predictions": str(detections_path.relative_to(repo_root)),
         "probability_dir": str(probability_dir.relative_to(repo_root)),
+        "second_probability_dir": (
+            str(second_probability_dir.relative_to(repo_root))
+            if second_probability_dir is not None
+            else None
+        ),
+        "first_probability_weight": (
+            args.first_probability_weight if second_probability_dir is not None else 1.0
+        ),
         "disk_geometry": str(geometry_path.relative_to(repo_root)) if geometry_path else None,
         "disk_geometry_sha256": _sha256(geometry_path) if geometry_path else None,
         "disk_shrink": args.disk_shrink if geometry_path else None,

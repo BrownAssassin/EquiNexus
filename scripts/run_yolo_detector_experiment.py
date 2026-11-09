@@ -7,6 +7,7 @@ import argparse
 import hashlib
 import json
 import os
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -32,6 +33,20 @@ def _sha256(path: Path) -> str:
         for chunk in iter(lambda: stream.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def _git_commit(repo_root: Path) -> str | None:
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=repo_root,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except (OSError, subprocess.CalledProcessError):
+        return None
+    return result.stdout.strip()
 
 
 def _within(path: Path, root: Path) -> bool:
@@ -270,8 +285,10 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     run_metadata = {
         "status": "complete",
         "run_name": args.run_name,
-        "source_commit": os.environ.get("EQUINEXUS_SOURCE_COMMIT"),
+        "source_commit": os.environ.get("EQUINEXUS_SOURCE_COMMIT") or _git_commit(repo_root),
         "source_bundle_sha256": os.environ.get("EQUINEXUS_SOURCE_BUNDLE_SHA256"),
+        "source_script_sha256": _sha256(Path(__file__).resolve()),
+        "validation_config_sha256": _sha256(repo_root / "configs" / "validation-baseline.json"),
         "split_sha256": split.sha256,
         "split_mode": split_mode,
         "split_manifest": str(split.manifest_path.relative_to(repo_root)),

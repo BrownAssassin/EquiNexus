@@ -497,6 +497,41 @@ def _normalized_crop(
     return np.clip((channels - mean) / std, -5.0, 5.0)
 
 
+def _component_count_8(mask: np.ndarray) -> int:
+    return int(cv2.connectedComponents(np.asarray(mask, dtype=np.uint8), connectivity=8)[0] - 1)
+
+
+def _select_topology_safe_tta(
+    single_probability: np.ndarray,
+    tta_probability: np.ndarray,
+    threshold: float,
+) -> tuple[np.ndarray, bool, str]:
+    """Keep flip-4 TTA only when its thresholded mask stays close in topology."""
+    single_mask = np.asarray(single_probability, dtype=np.float32) >= threshold
+    tta_mask = np.asarray(tta_probability, dtype=np.float32) >= threshold
+    single_area = int(single_mask.sum())
+    tta_area = int(tta_mask.sum())
+    if tta_area == 0:
+        return single_probability, False, "empty_tta_mask"
+    if single_area == 0:
+        return single_probability, False, "empty_single_view_mask"
+    area_ratio = tta_area / single_area
+    if area_ratio < 0.60:
+        return single_probability, False, "area_shrink_guard"
+    if area_ratio > 1.70:
+        return single_probability, False, "area_growth_guard"
+    single_components = _component_count_8(single_mask)
+    tta_components = _component_count_8(tta_mask)
+    if tta_components > max(single_components + 1, 2):
+        return single_probability, False, "fragmentation_guard"
+    if single_area >= 32:
+        denominator = single_area + tta_area
+        dice = 2.0 * int(np.logical_and(single_mask, tta_mask).sum()) / denominator
+        if dice < 0.62:
+            return single_probability, False, "overlap_guard"
+    return tta_probability, True, "accepted"
+
+
 def predict_seed_refiner(
     model: nn.Module,
     image: np.ndarray,
@@ -507,6 +542,9 @@ def predict_seed_refiner(
     score_threshold: float | None = None,
     probability_threshold: float | None = None,
     box_jitter: bool = False,
+    flip_tta: bool = False,
+    topology_safe_tta: bool = True,
+    tta_diagnostics: dict[str, int] | None = None,
 ) -> list[tuple[float, np.ndarray]]:
     if image.shape != (IMAGE_SIZE, IMAGE_SIZE) or image.dtype != np.uint8:
         raise ValueError("Seed-refiner inference expects a 2048x2048 uint8 grayscale image")
@@ -570,7 +608,8 @@ def predict_seed_refiner(
     if not prepared:
         return []
     model.eval()
-    probability_rows = []
+    single_probability_rows = []
+    tta_probability_rows = []
     with torch.inference_mode():
         for start in range(0, len(prepared), 8):
             batch = torch.from_numpy(
@@ -581,26 +620,52 @@ def predict_seed_refiner(
                     ]
                 )
             ).to(device)
-            with torch.autocast(
-                device_type=device.type,
-                dtype=torch.float16 if device.type == "cuda" else torch.bfloat16,
-                enabled=device.type == "cuda",
-            ):
-                probability_rows.extend(
-                    torch.sigmoid(model(batch).float())[:, 0].cpu().numpy()
-                )
-    probabilities = np.stack(probability_rows)
-    probabilities_by_detection: dict[int, list[np.ndarray]] = defaultdict(list)
+            def infer_probability(inputs: torch.Tensor) -> torch.Tensor:
+                with torch.autocast(
+                    device_type=device.type,
+                    dtype=torch.float16 if device.type == "cuda" else torch.bfloat16,
+                    enabled=device.type == "cuda",
+                ):
+                    return torch.sigmoid(model(inputs).float())[:, 0]
+
+            single_probabilities = infer_probability(batch)
+            if flip_tta:
+                tta_sum = single_probabilities.clone()
+                for dimensions in ((-1,), (-2,), (-2, -1)):
+                    transformed_probabilities = infer_probability(torch.flip(batch, dimensions))
+                    tta_sum += torch.flip(transformed_probabilities, dimensions)
+                tta_probabilities = tta_sum / 4.0
+            else:
+                tta_probabilities = single_probabilities
+            single_probability_rows.extend(single_probabilities.cpu().numpy())
+            tta_probability_rows.extend(tta_probabilities.cpu().numpy())
+    single_probabilities = np.stack(single_probability_rows)
+    tta_probabilities = np.stack(tta_probability_rows)
+    single_by_detection: dict[int, list[np.ndarray]] = defaultdict(list)
+    tta_by_detection: dict[int, list[np.ndarray]] = defaultdict(list)
     for index, (score, bounds, *_channels) in enumerate(prepared):
         detection_index = index // (5 if box_jitter and config.box_jitter_px > 0 else 1)
-        probabilities_by_detection[detection_index].append(probabilities[index])
+        single_by_detection[detection_index].append(single_probabilities[index])
+        tta_by_detection[detection_index].append(tta_probabilities[index])
 
     output = []
-    detection_count = len(probabilities_by_detection)
+    detection_count = len(single_by_detection)
     variants_per_detection = 5 if box_jitter and config.box_jitter_px > 0 else 1
     for detection_index in range(detection_count):
-        variants = probabilities_by_detection[detection_index]
-        probability = np.mean(variants, axis=0)
+        single_probability = np.mean(single_by_detection[detection_index], axis=0)
+        tta_probability = np.mean(tta_by_detection[detection_index], axis=0)
+        if flip_tta and topology_safe_tta:
+            probability, accepted, reason = _select_topology_safe_tta(
+                single_probability,
+                tta_probability,
+                probability_threshold,
+            )
+            if tta_diagnostics is not None:
+                tta_diagnostics[reason] = tta_diagnostics.get(reason, 0) + 1
+        else:
+            probability = tta_probability
+            if flip_tta and tta_diagnostics is not None:
+                tta_diagnostics["accepted"] = tta_diagnostics.get("accepted", 0) + 1
         binary_crop = (probability >= probability_threshold).astype(np.uint8)
         if int(binary_crop.sum()) < config.minimum_instance_area:
             continue
@@ -636,6 +701,9 @@ def predicted_instances(
     *,
     device: torch.device,
     box_jitter: bool = False,
+    flip_tta: bool = False,
+    topology_safe_tta: bool = True,
+    tta_diagnostics: dict[str, int] | None = None,
 ) -> list[PredictedInstance]:
     masks = predict_seed_refiner(
         model,
@@ -644,6 +712,9 @@ def predicted_instances(
         config,
         device=device,
         box_jitter=box_jitter,
+        flip_tta=flip_tta,
+        topology_safe_tta=topology_safe_tta,
+        tta_diagnostics=tta_diagnostics,
     )
     predictions = []
     for score, mask in masks:

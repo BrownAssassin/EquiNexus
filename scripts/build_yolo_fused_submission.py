@@ -41,8 +41,12 @@ def _source_tree_sha256(repo_root: Path) -> tuple[str, dict[str, str]]:
         *sorted((repo_root / "src" / "filament_baseline").glob("*.py")),
         repo_root / "scripts" / "reinfer_yolo_oof_tta.py",
         repo_root / "scripts" / "reinfer_yolo_test_tta.py",
+        repo_root / "scripts" / "train_yolo_full_training.py",
+        repo_root / "scripts" / "reinfer_yolo_fulltrain_test_tta.py",
+        repo_root / "scripts" / "export_yolo_dataset.py",
         repo_root / "scripts" / "deduplicate_yolo_tta_oof.py",
         repo_root / "scripts" / "build_yolo_fused_submission.py",
+        repo_root / "configs" / "yolo11s-tta8-fusion-oof-ranking.json",
     ]
     file_hashes = {}
     digest = hashlib.sha256()
@@ -84,6 +88,11 @@ def main() -> int:
     parser.add_argument("--unet-run-dir", type=Path, required=True)
     parser.add_argument("--detector-predictions", type=Path, required=True)
     parser.add_argument("--detector-metadata", type=Path, required=True)
+    parser.add_argument(
+        "--oof-ranking",
+        type=Path,
+        default=REPO_ROOT / "configs/yolo11s-tta8-fusion-oof-ranking.json",
+    )
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--first-member", default="annotator1024")
     parser.add_argument("--second-member", default="consensus512")
@@ -107,6 +116,7 @@ def main() -> int:
     unet_run = args.unet_run_dir.expanduser().resolve()
     detector_predictions_path = args.detector_predictions.expanduser().resolve()
     detector_metadata_path = args.detector_metadata.expanduser().resolve()
+    oof_ranking_path = args.oof_ranking.expanduser().resolve()
     output_dir = args.output_dir.expanduser().resolve()
     for label, path, allowed_root in (
         ("competition data", data_root, repo_root / "data"),
@@ -194,6 +204,112 @@ def main() -> int:
         closing_radius=args.closing_radius,
         solar_radius=args.solar_radius,
     )
+    if not oof_ranking_path.is_relative_to((repo_root / "configs").resolve()):
+        raise ValueError(f"OOF ranking must be kept under {repo_root / 'configs'}")
+    if not oof_ranking_path.is_file():
+        raise FileNotFoundError(f"Missing grouped OOF ranking: {oof_ranking_path}")
+    oof_ranking = json.loads(oof_ranking_path.read_text(encoding="utf-8"))
+    configuration = config.__dict__
+    matching_candidates = [
+        candidate for candidate in oof_ranking.get("candidates", [])
+        if candidate.get("configuration") == configuration
+    ]
+    if len(matching_candidates) != 1:
+        raise ValueError("Candidate configuration must match exactly one grouped OOF ranking row")
+    if (
+        oof_ranking.get("split", {}).get("frozen_holdout_sha256")
+        != detector_metadata.get("frozen_holdout_sha256")
+    ):
+        raise ValueError("OOF ranking and detector predictions use different frozen holdout splits")
+    if (
+        oof_ranking.get("split", {}).get("oof_manifest_sha256")
+        != detector_metadata.get("oof_manifest_sha256")
+    ):
+        raise ValueError("OOF ranking and detector predictions use different OOF manifests")
+    oof_metrics = matching_candidates[0]["oof_metrics"]
+    holdout_confirmation = oof_ranking.get("holdout_confirmation", {})
+    holdout_record_is_valid = holdout_confirmation.get("status") == "valid"
+    expected_unet_hashes = holdout_confirmation.get("unet_checkpoint_sha256", {})
+    actual_unet_hashes = {
+        name: member_results[name].get("checkpoint_sha256")
+        for name in (args.first_member, args.second_member)
+    }
+    detector_models = test_inference_metadata.get("models") or test_inference_metadata.get("folds", [])
+    if not detector_models or any(not item.get("checkpoint_sha256") for item in detector_models):
+        raise ValueError("Test inference metadata must record each detector checkpoint hash")
+    actual_detector_hashes = [item["checkpoint_sha256"] for item in detector_models]
+    matches_holdout_models = (
+        holdout_record_is_valid
+        and oof_ranking.get("model_ensemble", {}).get("first_member") == args.first_member
+        and oof_ranking.get("model_ensemble", {}).get("second_member") == args.second_member
+        and np.isclose(
+            float(oof_ranking.get("model_ensemble", {}).get("first_member_weight", -1)),
+            args.first_weight,
+        )
+        and holdout_confirmation.get("fusion_configuration") == configuration
+        and oof_ranking.get("model_ensemble", {}).get("test_mask_nms_iou") == args.mask_nms_iou
+    )
+    matches_holdout_inputs = (
+        _sha256(unet_metadata_path) == holdout_confirmation.get("unet_metrics_sha256")
+        and actual_unet_hashes == expected_unet_hashes
+        and _sha256(detector_predictions_path)
+        == holdout_confirmation.get("detector_predictions_sha256")
+        and actual_detector_hashes == holdout_confirmation.get("detector_checkpoint_sha256")
+    )
+    holdout_pq = (
+        holdout_confirmation.get("pq")
+        if matches_holdout_models and matches_holdout_inputs
+        else None
+    )
+    crossfit_holdout = oof_ranking.get("crossfit_holdout_validation", {})
+    crossfit_metrics = crossfit_holdout.get("metrics", {})
+    crossfit_ensemble = crossfit_holdout.get("model_ensemble", {})
+    crossfit_split = crossfit_holdout.get("split", {})
+    crossfit_holdout_matches = (
+        crossfit_holdout.get("status") == "valid_independent_crossfit_holdout"
+        and crossfit_holdout.get("does_not_validate_full_training_refit") is True
+        and crossfit_holdout.get("configuration") == configuration
+        and crossfit_split.get("frozen_holdout_sha256")
+        == detector_metadata.get("frozen_holdout_sha256")
+        and crossfit_split.get("oof_manifest_sha256")
+        == detector_metadata.get("oof_manifest_sha256")
+        and crossfit_ensemble.get("first_member") == args.first_member
+        and crossfit_ensemble.get("second_member") == args.second_member
+        and np.isclose(
+            float(crossfit_ensemble.get("first_member_weight", -1)),
+            args.first_weight,
+        )
+        and np.isclose(
+            float(crossfit_ensemble.get("second_member_weight", -1)),
+            1.0 - args.first_weight,
+        )
+        and crossfit_ensemble.get("detector_checkpoint_sha256")
+        == actual_detector_hashes
+    )
+    crossfit_holdout_reference = (
+        {
+            "status": crossfit_holdout["status"],
+            "pq": crossfit_metrics["pq"],
+            "tp": crossfit_metrics["tp"],
+            "fp": crossfit_metrics["fp"],
+            "fn": crossfit_metrics["fn"],
+            "mean_observation_pq": crossfit_metrics["mean_observation_pq"],
+            "median_observation_pq": crossfit_metrics["median_observation_pq"],
+            "observation_count": crossfit_metrics["observation_count"],
+            "annotator_view_count": crossfit_metrics["annotator_view_count"],
+            "applies_to_full_training_refit": False,
+            "metrics_sha256": crossfit_holdout.get("provenance", {}).get(
+                "fusion_metrics_sha256"
+            ),
+            "metrics_path": crossfit_holdout.get("provenance", {}).get(
+                "fusion_metrics_path"
+            ),
+        }
+        if crossfit_holdout_matches
+        else None
+    )
+    if not oof_metrics:
+        raise ValueError("Candidate configuration was not scored on grouped OOF predictions")
     first_cache = unet_run / "members" / args.first_member / "probabilities"
     second_cache = unet_run / "members" / args.second_member / "probabilities"
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -260,9 +376,28 @@ def main() -> int:
         "validation_reference": {
             "frozen_split_sha256": detector_metadata["frozen_holdout_sha256"],
             "oof_manifest_sha256": detector_metadata["oof_manifest_sha256"],
-            "holdout_pq": 0.4097760614657074,
-            "oof_pq": 0.4086201997023809,
-            "selection_note": "Fixed deduplicated detector/U-Net configuration confirmed once on the observation-grouped holdout before test inference.",
+            "oof_ranking_sha256": _sha256(oof_ranking_path),
+            "oof_metrics": oof_metrics,
+            "holdout_pq": holdout_pq,
+            "independent_crossfit_holdout": crossfit_holdout_reference,
+            "holdout_confirmation_configuration": (
+                holdout_confirmation.get("fusion_configuration")
+                if holdout_pq is not None
+                else None
+            ),
+            "selection_note": (
+                "The candidate configuration was scored on grouped OOF predictions. "
+                + (
+                    "The frozen holdout score is attached only when its model inputs and configuration exactly match the previously confirmed candidate."
+                    if holdout_pq is not None
+                    else (
+                        "Independent frozen-holdout cross-fit evidence is included for the five-fold mean model only; "
+                        "the final all-observation refit has no direct holdout score."
+                        if crossfit_holdout_reference is not None
+                        else "No frozen-holdout score is claimed for this postprocessing variant."
+                    )
+                )
+            ),
         },
         "fusion": {
             "first_member": args.first_member,
@@ -280,7 +415,7 @@ def main() -> int:
             "test_inference_metadata_sha256": _sha256(test_inference_metadata_path),
             "detector_predictions_sha256": _sha256(detector_predictions_path),
             "detector_checkpoint_hashes": [
-                item["checkpoint_sha256"] for item in test_inference_metadata["folds"]
+                item["checkpoint_sha256"] for item in detector_models
             ],
         },
         "test_validation": submission_validation,
