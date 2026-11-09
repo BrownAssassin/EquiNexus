@@ -432,3 +432,8 @@ The submission manifest and scores are recorded under ignored `artifacts/submiss
 
 - Adapted the public V23 cross-fold association and medoid idea using EquiNexus predictions only. On the frozen holdout it scored 0.369707 PQ versus 0.434930 for the incumbent; the paired 95% interval for the delta was [-0.077360, -0.052939]. Recall improved, but false positives nearly tripled, so the approach was rejected without test inference or submission.
 - The fixed split and scorer are unchanged. Full metrics, input hashes, per-observation diagnostics, and the reproduction script are recorded in `docs/experiment-log.md` and ignored `artifacts/model-experiments/crossfold-medoid-unet-fusion-20261109/`.
+
+## 2026-11-09 22:57 UTC seed-100 selector-feature screen
+
+- Replaced the per-annotator probability-map features with the 50:50 seed-42/seed-100 map ensemble while retaining the existing 75% consensus-map contribution and fixed base predictions. On grouped OOF, the best selector blend scored 0.423946 versus 0.424791 for the incumbent. The 142-observation holdout and test images were not used; this candidate is rejected.
+- The feature builder, four screens, split digest, input hashes and metrics are recorded in `docs/experiment-log.md` and ignored `artifacts/model-experiments/component-selector-seed100-*20261109/`.
