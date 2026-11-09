@@ -28,7 +28,7 @@
 
 - Anthony Therrien's public blended-tile U-Net notebook uses the supplied training COCO annotations, unions the annotator masks per source observation, and predicts a single 1888-pixel native-resolution solar-disk crop. Its crop and union-target ideas remain relevant; external initialization will be assessed on the frozen EquiNexus split and scorer: <https://www.kaggle.com/code/anthonytherrien/magfilo-blended-tile-u-net-for-solar-filaments>.
 - Dariush Afshar's public U-Net report describes grouped five-fold training, soft consensus masks across annotators, 512-pixel full-resolution crops, and native-resolution inference. Its report claims 0.4502 nested OOF PQ. The published encoders use ImageNet-supervised initialization and the model dataset is CC BY-NC-SA 4.0, so EquiNexus uses the training ideas as a reference but does not depend on those checkpoints: <https://www.kaggle.com/code/dariushafshar/solar-filament-u-net-oof-0-45-vs-public-0-39> and <https://www.kaggle.com/datasets/dariushafshar/solar-filament-unet-weights>.
-- Robina Mirbahar's public classical notebook describes radial disk normalization, multiscale black-hat salience, robust median/MAD thresholding, hysteresis, and short-gap bridging. An independent implementation is evaluated against the EquiNexus frozen split: <https://www.kaggle.com/code/robinamirbahar/solar-filament-panoptic-morphology-segmentation>.
+- An earlier revision of Robina Mirbahar's public notebook described radial disk normalization, multiscale black-hat salience, robust median/MAD thresholding, hysteresis, and short-gap bridging; our independent reproduction scored PQ 0.0554 on the frozen holdout. The Kaggle page now contains a different I079-based inference handoff under the same URL, with none of those classical operations. Treat the earlier result as a historical version-specific experiment, not a description of the current notebook: <https://www.kaggle.com/code/robinamirbahar/solar-filament-panoptic-morphology-segmentation>.
 - The public YOLO plus U-Net notebook initializes from externally pretrained YOLO and ResNet weights. Its weights are candidates for a separate provenance and license audit before any use; architecture ideas remain a reference: <https://www.kaggle.com/code/ektarr/yolo-u-net-solar-filament-segmentation>.
 - A public challenge repository reports a two-channel, radially corrected U-Net combined with YOLO11-seg detectors and eight-way rotation/reflection TTA. Its MIT-licensed code is pinned for review at commit `81a739bb7786a44b989f5d76afbb6f9d22b5d1dd`; its 563-observation training split excludes every observation in the frozen EquiNexus holdout, making its reported 0.421 cross-fitted PQ useful methodological evidence. The public checkpoint bundle is CC BY-NC 4.0, while this competition offers cash prizes, so EquiNexus will not use those checkpoints. We can test the detector-guided fusion design using our own training run and compatible, documented initialization: <https://github.com/ameyypawar/filament-seg> and <https://www.kaggle.com/datasets/ameypawar123456789/filament-seg-weights>.
 - Farnoosh Memari's MIT-licensed public repository (reviewed at commit `ef37d2e93d4cc9e248595e791ee39fe520d392d0`) reports 0.389 validation PQ with a compact U-Net trained from scratch, a soft per-pixel annotator consensus, 70% foreground-centered 512-pixel crops, disk-based intensity normalization, and four-view TTA. Its month-held-out split and postprocessing search differ from the EquiNexus protocol, so that score is not directly comparable. The cited run used no external weights or labels. New pretrained candidates are assessed separately on the frozen EquiNexus split: <https://github.com/FarnooshMemari/solar-filament-segmentation>.
@@ -39,7 +39,7 @@
 
 - The Kaggle API snapshot at 00:40 UTC showed the top team score at 0.70, followed by 0.64 and several 0.62 entries. The Code tab also surfaces notebooks with scores above 0.90. The host says scores above 0.35 already have high value and warns that leaderboard results can be misleading; an empty-mask scoring defect was publicly reported. We record our own scores for observation, but promote solutions only on the frozen official-scorer validation: <https://www.kaggle.com/competitions/filament-segmentation-2026/overview/announcements> and <https://www.kaggle.com/discussions/product-feedback/729163>.
 - Kaggle's public `phuongncn/solar-filament-i079-weights` model is Apache 2.0 and its model card says task training used competition training annotations only. The credited source notebook initializes Mask R-CNN from torchvision COCO weights and its refiner from ImageNet ResNet-18 weights. Its checkpoints remain pending a provenance/split audit against the no-extra-ground-truth boundary before use. Its topology-aware TTA and detector/refiner ideas remain references: <https://www.kaggle.com/models/phuongncn/solar-filament-i079-weights> and <https://www.kaggle.com/code/nomannic19/cv-solar-filament-mask-r-cnn-u-net-refiner>.
-- The public CAGE R4 checkpoint card reports a three-head mask/hull/interior U-Net and a held-out PQ of 0.4022. Its ResNet-34 encoder starts from ImageNet weights, and its 100-entry record-level split allows multi-annotator observations to cross folds; we do not use that checkpoint or score as validation evidence. Its hull grouping head is a useful experiment idea: <https://www.kaggle.com/models/jamesmills1975/cage-filament-unet>.
+- The public CAGE R4 checkpoint card reports a three-head mask/hull/interior U-Net and a held-out PQ of 0.4022. Its ResNet-34 encoder starts from ImageNet weights, and its 100-entry record-level split allows multi-annotator observations to cross folds. The author declares CC BY-NC 4.0 because the weights derive from competition data; we do not use this checkpoint or its reported score. Its hull grouping head remains a reference idea: <https://www.kaggle.com/models/jamesmills1975/cage-filament-unet>.
 - The newly released V23 package reports public LB 0.39 and uses five YOLO11 detectors, five fold-specific refiners, cross-fold association, and medoid masks. Its README says inference starts from pretrained weights, and attribution requires preserving the Ultralytics/model licenses. We use its cross-fold ensemble idea as a reference; the earlier EquiNexus U-Net folds were scratch-trained, while the COCO-initialized YOLO folds are evaluated separately under Rule 6: <https://github.com/Jeanjean59800/solar-filament-segmentation-2026>.
 - Farnoosh Memari's MIT-licensed from-scratch U-Net reports PQ 0.389 on a held-out-month split and 0.32 public LB; it downscales to 1024, uses soft consensus targets, then joins nearby fragments. This is a useful scale/postprocessing reference, though the split and results are not directly comparable: <https://github.com/FarnooshMemari/solar-filament-segmentation>.
 - The earlier submission batch used only EquiNexus scratch-trained checkpoints. New submissions may use audited public pretrained models or unlabeled external solar data, but never public MAGFiLO test annotations.
@@ -340,3 +340,90 @@ The submission manifest and scores are recorded under ignored `artifacts/submiss
 - Prepared five complete test CSV variants for the next daily submission window: the standard selector (C=1, 0.40), the separately validated empty fallback, C=1 thresholds 0.35 and 0.50, and the grouped-OOF-screened C=4 / 0.45 variant. Counts are 1,022, 1,023, 1,045, 965, and 991 instances respectively. All have complete 180-image coverage and passed full-resolution submission validation.
 - OOF PQ values are 0.423498, 0.423636, 0.421799, 0.423053, and 0.423515. Only the standard selector and fallback have fixed-holdout scores; keep the standard selector as primary because the fallback point gain is tiny and the C=4 OOF gain over C=1 is only 0.000017. Do not interpret the test-only CSVs as scored.
 - Today's five Kaggle submissions are complete, so this batch is queued locally. Its run metadata is ignored under `artifacts/submissions/`; no data or predictions are tracked.
+
+## 2026-11-09 18:40 UTC LightGBM selector screen
+
+- Cross-fitted three regularized LightGBM component selectors across the five frozen observation-grouped folds, then selected one blend and threshold using OOF predictions only. The selected 50% LightGBM / 50% incumbent probability blend at threshold 0.425 scored 0.425026 OOF, a small gain over the RF blend's 0.424791.
+- A single evaluation on the frozen holdout scored 0.431953 versus 0.434930 for the RF incumbent. The paired observation-bootstrap 95% interval for LightGBM minus RF was [-0.006400, 0.000249], with 3.64% positive resamples. Retain as a documented negative result; do not promote or submit.
+- Full inputs, hashes, per-observation metrics, and overlays remain ignored under `artifacts/model-experiments/component-selector-lightgbm-20261109-reviewed/`. The CPU run used LightGBM 4.7.0, pinned as an optional experiment dependency in `requirements-experiments.txt`.
+
+## 2026-11-09 19:49 UTC local YOLO11s validation
+
+- Completed a 25-epoch, 1280-pixel YOLO11s-seg run on the local RTX 5070 Laptop GPU. It trained on 565 training-partition observations / 922 annotator views and evaluated on the frozen 142-observation holdout / 232 views; the split digest remains `30cb2ec52437daf97e769a3a61bf83350062e6cf4f5d00af1f8399649065e48e`. Best mask mAP50 was 0.5961 at epoch 25.
+- Applied the single confidence threshold 0.35 selected in the earlier grouped OOF YOLO11s screen, with minimum area 0. The official scorer returned PQ 0.368679 (838 TP, 371 FP, 909 FN over 1,711 GT instances). This is well below the current selector blend at 0.434930; do not promote or submit it.
+- Ultralytics selected the checkpoint by mask mAP on this repeatedly used holdout, so treat its PQ as exploratory fixed-split evidence rather than an untouched generalization estimate. The run used the Ultralytics COCO YOLO11s-seg weights (AGPL-3.0, SHA-256 `1caa81c0195412efa411b632bcfb8c184939dddb6ae41f6a80c41b211ff257c3`), PyTorch 2.15.0+cu132, CUDA 13.2, and Ultralytics 8.4.173; training took 3,274 s, best/last holdout inference 104 s, and Torch reported 3.26 GB peak allocated GPU memory. Checkpoint, predictions, scorer output, and complete metadata are ignored under `artifacts/detector-experiments/yolo11s-seg-1280-25ep-holdout-20261109/`.
+
+## 2026-11-09 20:04 UTC XGBoost selector screen
+
+- Cross-fitted three regularized CPU XGBoost configurations across the same five observation-grouped folds, then selected one blend and threshold using OOF predictions only. XGBoost 3.4.1 at 50% weight with the existing logistic/ExtraTrees core scored 0.424315 OOF, below the RF blend's 0.424791.
+- The single OOF-selected candidate scored 0.433302 on the fixed holdout versus 0.433977 for the core blend and 0.434930 for the RF incumbent. The paired holdout delta against the RF blend was -0.001628 with 95% observation-bootstrap interval [-0.004282, 0.000943]. Do not promote or submit it.
+- The largest-gain overlay adds one small match; the largest-loss overlay drops a short matched trace. Inputs, hashes, per-observation metrics, and overlays are under ignored `artifacts/model-experiments/component-selector-xgboost-20261109/`. The reusable screen is `scripts/screen_component_selector_xgboost.py`, and XGBoost is pinned as an optional CPU experiment dependency.
+
+## 2026-11-09 20:12 UTC leaderboard refresh
+
+- Refreshed the complete Kaggle leaderboard: 1,460 teams, EquiNexus rank 663 at 0.36. IONode Online remains at 0.70, Tempest at 0.64, and four teams are at 0.62. The public score ordering does not change validation decisions.
+- All 15 EquiNexus submissions are scored. The five hash-locked component-selector CSVs for Nov 10 remain ready for the scheduled submission window; no new candidate was promoted by the YOLO or XGBoost screens.
+
+## 2026-11-09 20:27 UTC site/year context screen
+
+- Added one-hot capture site and year to the component selector's existing numeric features, then cross-fitted C=0.25/1/4 logistic models across the same five observation-grouped folds. OOF-only blend selection assigned the context model 0% weight; the best score remained the core selector at 0.424245, below the RF blend at 0.424791.
+- Because no context model improved OOF, the fixed holdout was not scored. No submission candidate changed. Full probabilities and input hashes are under ignored `artifacts/model-experiments/component-selector-context-20261109/`; reusable code is `scripts/screen_component_selector_context.py`.
+
+## 2026-11-09 20:37 UTC morphology-aware selector screen
+
+- Added ten component features from skeleton geometry, estimated width and branching, contour perimeter, interior intensity quantiles, and local ring contrast. A random forest was cross-fitted over the same five frozen observation groups, then blended with the incumbent selector using OOF predictions only.
+- The best morphology blend scored 0.424284 OOF, below the existing RF blend at 0.424791. The fixed holdout was not evaluated and no submission candidate changed.
+- The run took 75.19 seconds on CPU across 3,533 components. A guarded rerun reproduced the enriched features and candidate sweep byte-for-byte in 74.83 seconds. Inputs, features, probabilities, scores, and hashes are under ignored `artifacts/model-experiments/component-selector-morphology-20261109/` and `...-recheck/`; reusable code is `scripts/screen_component_selector_morphology.py` (SHA-256 `0805dda59e7c014241087c4a7545c526975a004bd07c1d66ef1c6ad3a6b2519a`).
+
+## 2026-11-09 20:45 UTC public MAGFiLO V11/V12 audit
+
+- Pulled the public V11 inference notebook and V12 crop-fine-tuning notebook under ignored `artifacts/kaggle/reference-audit/`. V11 reports a local PQ near 0.4347, but its model selection comes from a 15% random photo split with repeated PQ evaluation during crop-model fine-tuning. This is selection-aware and differs from our frozen five-fold grouped OOF evidence.
+- The inference notebook's detector/crop checkpoint paths and versions are inconsistent across cells, and Kaggle returned HTTP 403 when asked for metadata on its referenced checkpoint datasets. Their license and full training provenance therefore remain unverified. We did not download or use either checkpoint, and the notebook's reported score was not compared as an equivalent validation result.
+- Its confidence-first detection and crop-refinement pipeline is already represented by our YOLO plus crop-refiner experiments. No new experiment or submission candidate was justified by this audit.
+
+## 2026-11-09 20:48 UTC leaderboard refresh
+
+- Refreshed the complete leaderboard: 1,460 teams; EquiNexus remains rank 663 at 0.36, with 15 submissions. The public leaders remain at 0.70 and 0.64; four teams are at 0.62. Recent activity includes 0.56 and 0.55 scores, but no new high score that changes our validation decisions.
+- The full snapshot and SHA-256 are in `artifacts/kaggle/leaderboard/202611092055-utc/`; the five prepared Nov 10 CSVs remain unchanged.
+
+## 2026-11-09 20:53 UTC observation-level count calibration
+
+- Cross-fitted ridge, random-forest, and histogram-gradient count regressors across the five frozen observation folds. Features summarized the OOF component probabilities and morphology; targets were mean annotated filament counts across each observation's competition-provided annotator views.
+- The best top-K candidate scored 0.417146 OOF, below the global RF blend at 0.424791. It lost in all five folds, by 0.0047 to 0.0140 PQ, so the holdout was not scored and no candidate changed.
+- The 25.08-second CPU run, count features, cross-fitted counts, candidate sweep, and input hashes are under ignored `artifacts/model-experiments/component-selector-count-calibration-20261109/`. Reusable code is `scripts/screen_component_selector_count_calibration.py` (SHA-256 `05769d4afa2eab6d4765d3475a295fbee4272cbf620eb11f9f3237b5db1ce334`).
+
+## 2026-11-09 21:03 UTC marginal-utility weighted selector
+
+- Weighted component-classifier samples by the absolute marginal PQ effect of keeping or deleting that component, normalized so each observation retained equal total weight. Cross-fitted logistic and random-forest variants across the five grouped folds, screening four utility exponents, blends, and thresholds.
+- The best OOF setting gained only 0.000044 over the incumbent RF blend. The 20,000-resample paired observation bootstrap interval was [-0.000869, 0.000946], with 54.22% positive draws; the holdout was not scored and no submission candidate changed.
+- The CPU run took 63.23 seconds. Fold comparisons, OOF probabilities, candidate sweep, bootstrap output, and hashes are under ignored `artifacts/model-experiments/component-selector-utility-weighted-20261109/`. Reusable code is `scripts/screen_component_selector_utility_weighted.py` (SHA-256 `6f5b7aac7f420708c4350a718a02f06151d7f1ee32c91aa11db0b4b027089769`).
+
+## 2026-11-09 21:14 UTC pairwise component ranking screen
+
+- Cross-fitted three XGBoost `rank:pairwise` configurations over within-observation ranks of component marginal PQ contribution, using the same five grouped OOF folds and frozen split digest `30cb2ec52437daf97e769a3a61bf83350062e6cf4f5d00af1f8399649065e48e`.
+- The best candidate blended the existing RF selector with the depth-3 ranker at 30% ranker weight and threshold 0.40, reaching 0.424907 OOF PQ versus 0.424791 for the RF incumbent. Four folds improved and one fell by 0.001930. A 20,000-resample paired observation bootstrap estimated +0.000116, with 95% interval [-0.000647, 0.000929] and 61.18% positive draws; evidence is inconclusive, so the holdout was not scored and no candidate changed.
+- The CPU run took 37.52 seconds with XGBoost 3.4.1; inputs, OOF probabilities, fold scores, candidate sweep, bootstrap and metrics are under ignored `artifacts/model-experiments/component-selector-pairwise-ranker-20261109-full565/`. Reusable code is `scripts/screen_component_selector_pairwise_ranker.py`.
+
+## 2026-11-09 21:27 UTC rank-consensus selector ensemble
+
+- Scored 96 combinations of per-observation rank consensus, raw probability means, and blends across seven frozen grouped-OOF selector probability sources. The best candidate was the equal probability mean at threshold 0.45, with 0.424435 PQ versus 0.424791 for the RF incumbent.
+- The paired 20,000-resample observation bootstrap delta was -0.000354, with 95% interval [-0.001644, 0.000951] and 29.13% positive draws. Rank-only candidates scored at most 0.393263. The fixed holdout was not scored and no submission candidate changed.
+- Full cross-fitted probability inputs, candidate sweep, hashes, and metrics are under ignored `artifacts/model-experiments/component-selector-rank-consensus-20261109/`. Reusable code is `scripts/screen_component_selector_rank_consensus.py`.
+
+## 2026-11-09 21:42 UTC CatBoost pairwise ranker screen
+
+- Cross-fitted three CatBoost 1.2.10 `PairLogitPairwise` rankers on the five frozen grouped OOF folds, using competition-provided annotation-derived relevance labels. The best 30% ranker blend scored 0.424590 OOF PQ, below the RF incumbent at 0.424791.
+- Its 20,000-resample paired observation bootstrap delta was -0.000201, with 95% interval [-0.001163, 0.000774] and 34.75% positive draws. It lost in four folds and gained in one. The fixed holdout was not scored, and no submission candidate changed.
+- The 293.35-second CPU run, cross-fitted rank scores, candidate sweep, input hashes, and metrics are under ignored `artifacts/model-experiments/component-selector-catboost-ranker-20261109/`. Reusable code is `scripts/screen_component_selector_catboost_ranker.py`; CatBoost 1.2.10 is pinned in `requirements-experiments.txt`.
+
+## 2026-11-09 21:48 UTC public report metric audit
+
+- Reviewed the v0.3 (July 20) public report from FELIPEACASTRO/solar-filament-2026, which claims a hidden `instance_wise_dice` metric and a 0.71 public score.
+- Kaggle's official overview records an Aug 7 evaluation update replacing the original mean-Dice wording with Panoptic Quality. The report's metric claim and score predate that update, so neither is comparable to current scorer-aligned validation. We adopted no code, checkpoint, or public test labels; the frozen split and scorer remain unchanged.
+- Sources: [historical report](https://github.com/FELIPEACASTRO/solar-filament-2026/blob/master/report/TECHNICAL_REPORT.md) and [official evaluation](https://www.kaggle.com/competitions/filament-segmentation-2026/overview/important-dates).
+
+## 2026-11-09 22:05 UTC component-selector seed-ensemble screens
+
+- Averaging five cross-fitted random-forest seeds scored 0.424763 OOF versus 0.424791 for the current blend. The paired observation-bootstrap interval was [-0.000218, 0.000171], so the ensemble was not promoted.
+- Averaging five cross-fitted ExtraTrees seeds scored 0.424872 OOF, a +0.000081 point difference; its 95% paired interval [-0.000102, 0.000352] includes zero. The fixed holdout was not used, and neither ensemble changed the prepared five-candidate submission batch.
+- Both screens covered all 565 OOF observations under the frozen grouped split, used only competition training annotations, and ran CPU-only. Source scripts and detailed metrics are recorded in `docs/experiment-log.md` and ignored `artifacts/model-experiments/component-selector-*-seed-ensemble-20261109/` folders.

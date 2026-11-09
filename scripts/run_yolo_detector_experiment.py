@@ -186,6 +186,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     candidate_paths = (
         Path(args.model).expanduser(),
         Path.cwd() / pretrained_name,
+        Path.cwd() / "weights" / pretrained_name,
         model_cache / pretrained_name,
     )
     pretrained_path = next((path.resolve() for path in candidate_paths if path.is_file()), None)
@@ -312,6 +313,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                 "Ultralytics YOLO11-seg COCO pretrained weights",
             ),
             "license": os.environ.get("EQUINEXUS_PRETRAINED_LICENSE", "AGPL-3.0"),
+            "local_path": str(pretrained_path) if pretrained_path else None,
             "sha256": pretrained_hash,
         },
         "configuration": {

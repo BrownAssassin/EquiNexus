@@ -1,0 +1,4 @@
+# Optional CPU tabular-selector screens; install only when running these experiments.
+lightgbm==4.7.0
+xgboost==3.4.1
+catboost==1.2.10
