@@ -190,7 +190,8 @@ class ScorerTests(unittest.TestCase):
         mask = np.zeros((2048, 2048), dtype=np.uint8)
         mask[10:13, 20:24] = 1
         rle = encode_binary_mask(mask)
-        prediction = PredictedInstance("20140609195854Bh_1", "20140609195854Bh", 12, rle)
+        byte_rle = {**rle, "counts": rle["counts"].encode("ascii")}
+        prediction = PredictedInstance("20140609195854Bh_1", "20140609195854Bh", 12, byte_rle)
         with tempfile.TemporaryDirectory(dir=REPO_ROOT / "data" / "splits") as directory:
             path = Path(directory) / "predictions.csv"
             _write_predictions(path, {prediction.image_stem: [prediction]})
@@ -198,6 +199,8 @@ class ScorerTests(unittest.TestCase):
                 rows = list(csv.reader(stream))
         self.assertEqual(rows[0], ["filament_id", "segmentation_rle"])
         self.assertEqual(rows[1], [prediction.filament_id, rle["counts"]])
+        decoded = decode_rle({"size": [2048, 2048], "counts": rows[1][1]})
+        np.testing.assert_array_equal(decoded, mask)
 
     def test_predictions_are_reused_for_every_annotator_view(self) -> None:
         dataset = fake_dataset(observation_count=1, views_per_observation=2)

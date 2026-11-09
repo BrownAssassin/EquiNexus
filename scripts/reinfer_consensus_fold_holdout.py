@@ -38,7 +38,7 @@ def _sha256(path: Path) -> str:
 def main() -> int:
     parser = argparse.ArgumentParser(
         description=(
-            "Average saved grouped-OOF consensus U-Net fold predictions on the "
+            "Average saved grouped-OOF U-Net fold predictions on the "
             "frozen holdout without training on any holdout observation."
         )
     )
@@ -73,14 +73,17 @@ def main() -> int:
     source_metrics_path = source_run_root / "metrics.json"
     source_metrics = json.loads(source_metrics_path.read_text(encoding="utf-8"))
     method = source_metrics.get("method", {})
+    target_mode = method.get("target_mode")
+    patch_size = method.get("patch_size")
+    tta = method.get("tta")
     split_metadata = source_metrics.get("splits", {})
     if (
-        method.get("target_mode") != "consensus"
-        or method.get("patch_size") != 512
-        or method.get("tta") != 4
+        target_mode not in {"consensus", "annotator"}
+        or not isinstance(patch_size, int)
+        or not isinstance(tta, int)
         or method.get("external_supervised_weights") is not False
     ):
-        raise ValueError("Source run is not the expected scratch consensus512/TTA4 model")
+        raise ValueError("Source run is not a supported scratch grouped-OOF U-Net model")
     if split_metadata.get("fold_count") != 5:
         raise ValueError("Source run must contain exactly five grouped OOF folds")
 
@@ -153,7 +156,7 @@ def main() -> int:
     summed_boundary = {stem: np.zeros_like(value) for stem, value in summed_foreground.items()}
     inference_started = time.perf_counter()
     for fold, checkpoint_path in enumerate(checkpoint_paths):
-        print(f"Loading consensus fold {fold + 1}/5", flush=True)
+        print(f"Loading {target_mode} fold {fold + 1}/5", flush=True)
         model = _load_model(checkpoint_path, device)
         fold_started = time.perf_counter()
         for index, file_name in enumerate(validation_names, start=1):
@@ -162,9 +165,9 @@ def main() -> int:
                 model,
                 image,
                 device=device,
-                patch_size=512,
-                stride=384,
-                tta=4,
+                patch_size=patch_size,
+                stride=int(patch_size * 0.75),
+                tta=tta,
             )
             stem = Path(file_name).stem
             summed_foreground[stem] += foreground
@@ -203,11 +206,11 @@ def main() -> int:
         "status": "complete",
         "run_name": output_dir.name,
         "method": {
-            "name": "five-fold mean of scratch consensus512 U-Net probabilities",
-            "target_mode": "consensus",
-            "patch_size": 512,
-            "stride": 384,
-            "tta": 4,
+            "name": f"five-fold mean of scratch {target_mode} U-Net probabilities",
+            "target_mode": target_mode,
+            "patch_size": patch_size,
+            "stride": int(patch_size * 0.75),
+            "tta": tta,
             "external_supervised_weights": False,
         },
         "data_boundary": {

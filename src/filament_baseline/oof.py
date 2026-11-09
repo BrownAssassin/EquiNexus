@@ -69,6 +69,7 @@ def run_training_partition_oof(
     batch_size: int = 2,
     patch_size: int = 512,
     base_channels: int = 16,
+    training_seed: int | None = None,
     model_type: str = "unet",
     pretrained_backbone: bool = False,
     hub_repository: str = DINO_V2_REPOSITORY,
@@ -109,6 +110,11 @@ def run_training_partition_oof(
     validation_config_path = repo_root / "configs" / "validation-baseline.json"
     validation_config = json.loads(
         validation_config_path.read_text(encoding="utf-8")
+    )
+    model_seed = (
+        int(validation_config["seed"])
+        if training_seed is None
+        else int(training_seed)
     )
     validation_config_sha256 = hashlib.sha256(
         validation_config_path.read_bytes()
@@ -210,7 +216,7 @@ def run_training_partition_oof(
             target_mode=target_mode,
             patch_size=patch_size,
             augment=True,
-            seed=int(validation_config["seed"]) + fold_index,
+            seed=model_seed + fold_index,
             input_mode=input_mode,
         )
         validation_dataset = FilamentPatchDataset(
@@ -219,7 +225,7 @@ def run_training_partition_oof(
             target_mode=target_mode,
             patch_size=patch_size,
             augment=False,
-            seed=int(validation_config["seed"]) + fold_index,
+            seed=model_seed + fold_index,
             input_mode=input_mode,
         )
         checkpoint_path = fold_root / "best_model.pt"
@@ -235,7 +241,7 @@ def run_training_partition_oof(
             steps=steps,
             batch_size=batch_size,
             base_channels=base_channels,
-            seed=int(validation_config["seed"]) + fold_index,
+            seed=model_seed + fold_index,
             validation_interval=max(100, min(500, steps // 5)),
             model_type=model_type,
             pretrained_backbone=pretrained_backbone,
@@ -385,10 +391,11 @@ def run_training_partition_oof(
             "model_type": model_type,
             "target_mode": target_mode,
             "patch_size": patch_size,
-                "base_channels": base_channels,
+            "base_channels": base_channels,
             "input_mode": input_mode,
             "steps_per_fold": steps,
             "batch_size": batch_size,
+            "training_seed": model_seed,
             "tta": tta,
             "instance_config": candidate_config.__dict__,
             "pretrained_backbone": pretrained_backbone,

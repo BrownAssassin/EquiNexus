@@ -107,7 +107,10 @@ def _write_predictions(
         writer.writerow(("filament_id", "segmentation_rle"))
         for file_name in sorted(predictions):
             for prediction in predictions[file_name]:
-                writer.writerow((prediction.filament_id, prediction.rle["counts"]))
+                counts = prediction.rle["counts"]
+                if isinstance(counts, bytes):
+                    counts = counts.decode("ascii")
+                writer.writerow((prediction.filament_id, counts))
 
 
 def _write_observation_scores(

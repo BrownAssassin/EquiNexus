@@ -287,3 +287,56 @@ The submission manifest and scores are recorded under ignored `artifacts/submiss
 - Eight-view D4 inference on the local 1024px YOLO11m checkpoint produced 19,016 masks in 503 seconds. Applying the established confidence-ordered mask NMS at IoU 0.30 retained 2,019 detections and removed 16,997 repeats. The fixed confidence 0.30 / area 400 detector score was 0.348379, below the single-view 0.354714 result.
 - The fixed 25:75 U-Net fusion configuration scored 0.407802 on this holdout, below the 0.415892 grouped-OOF candidate. The holdout-selected local checkpoint makes this a screening result only; it is not promoted. Raw undeduplicated TTA scoring was invalidated and marked in its artifact folder.
 - The source and full scorer details are in `docs/experiment-log.md`; all D4 predictions and reports remain under ignored `artifacts/`. Kaggle's five-fold YOLO11m grouped-OOF kernel remains `RUNNING`; the laptop is idle on AC.
+
+## 2026-11-09 06:30 UTC sprint status
+
+- Kaggle's YOLO11m 1280px grouped-OOF kernel completed. Its best detector-only OOF PQ was 0.400640; best p25 U-Net fusion was 0.397230, and D4/TTA8 fusion was 0.408422. YOLO11s p25 remains the stronger validated family at 0.415892 OOF.
+- The aligned p25 holdout rerun reproduced PQ 0.414534. p22.5 scored 0.413165. Confidence 0.37 scored 0.414659 versus 0.414534 at 0.35, while its OOF gain is only 0.000019; paired observation-bootstrap uncertainty spans zero, so no new variant is promoted.
+- Two earlier holdout scores were invalidated because they used mismatched per-annotator caches. Their artifact folders now contain `INVALIDATED.md` markers. The frozen split and OOF digests remain unchanged.
+- The user reports Kaggle GPU quota is exhausted until after the sprint cutoff; the latest OAuth approval timed out while they were away. No new Kaggle run or submission is pending, and no further authorization will be requested while they are unavailable. Local RTX 5070 AC power was confirmed.
+
+## 2026-11-09 12:45 UTC local seed-100 result
+
+- Completed a five-fold scratch per-annotator U-Net OOF run with a new training seed and the unchanged frozen split. The p25 YOLO fusion OOF PQ was 0.416005 versus 0.415892 for the incumbent; the aligned holdout was 0.413370 versus 0.414534. Paired observation bootstrap uncertainty crossed zero, so the new seed was not promoted.
+- The local grouped OOF runner now accepts `--training-seed` without changing the seed-42 split or fold manifest. All new checkpoints and predictions remain ignored under `artifacts/`; no submission or all-data refit was created.
+- Kaggle GPU quota is unavailable before the cutoff and OAuth timed out while the user was away. No additional Kaggle work is pending.
+
+## 2026-11-09 13:16 UTC cross-seed ensemble screen
+
+- The 50:50 seed-42/seed-100 per-annotator model average improved standalone OOF PQ to 0.357821 from 0.356643 for seed 42. With consensus maps at the established 25:75 weight and the incumbent YOLO fusion setting, OOF PQ was 0.415972 versus 0.415892.
+- The paired observation bootstrap interval for the fused OOF change was [-0.000756, 0.000932]; the 0.000080 gain is inconclusive. Keep the current p25 candidate and do not spend holdout budget on this branch.
+- Kaggle quota resets in 113h41m according to the user, which is after the sprint cutoff. The local laptop remains the available runtime; no OAuth prompts or Kaggle jobs were started.
+
+## 2026-11-09 14:25 UTC component selector and submission candidate
+
+- New leading scorer-aligned candidate: a logistic keep/drop selector trained only on grouped OOF components and competition annotations. At its OOF-selected threshold 0.40, it scores 0.423498 OOF and 0.430531 on the fixed holdout, versus 0.415892 and 0.414534 for the incumbent. The paired holdout improvement is +0.015997 with 95% observation-bootstrap interval [0.010623, 0.021313]. It reduces holdout FP from 700 to 511 while increasing FN from 623 to 656.
+- The selector's component deletion targets, holdout aggregates, and organizer-scorer samples were audited. A byte-to-text RLE serialization bug in its first saved prediction files was fixed in the shared writer; the corrected run reproduces the in-memory metrics and all emitted RLE CSVs round-trip correctly.
+- Rebuilt the earlier three-family OOF vote CSV through the corrected writer; its PQ remains 0.399100, so it stays below the promoted selector candidate. Only the explicitly invalidated first selector run retains malformed RLE CSVs.
+- Paired overlays are saved for the largest holdout gain, median change, and largest loss. One image shows the selector deleting the only correct match; keep the OOF-selected 0.40 cutoff fixed and treat this over-pruning case as a model limitation.
+- Full-fit test inference is ready at `artifacts/submissions/component-selector-fullfit-test-20261109/`: 1,022 masks across all 180 supplied test images, compared with 1,124 from the base candidate. It is not submitted and has no public score yet. Kaggle GPU quota resets after this sprint, and the user is unavailable for sign-in while asleep.
+- A grouped-OOF-only screen of three logistic regularization strengths and two tree models found no meaningful gain over C=1: the best alternative reached 0.423515 versus 0.423498. Keep C=1 / 0.40; no holdout tuning was done.
+- Meta-selector work ran CPU-only on Windows 11 / Python 3.12.10 with the RTX 5070 idle; package versions, source hashes, and per-run times are recorded in the ignored metrics artifacts.
+
+## 2026-11-09 15:30 UTC fallback candidate and refreshed Kaggle status
+
+- A separately evaluated empty-output fallback raises OOF PQ from 0.423498 to 0.423636 and fixed-holdout PQ from 0.430531 to 0.430617. Both point estimates favor it, but paired observation-bootstrap intervals include zero and the holdout gain is only 0.000086. Keep the standard selector as the primary candidate and preserve the fallback build as a backup; do not describe it as a robust gain.
+- The backup full-fit test CSV is validated and contains 1,023 instances across 180 supplied images; it restores one component where the selector would otherwise leave an image empty. The output is ignored under `artifacts/submissions/component-selector-fullfit-test-20261109-empty-fallback/` and has not been submitted.
+- Kaggle CLI authentication is valid. All five submissions for November 9 are complete, so today's submission allowance is used. The full leaderboard now has 1,456 teams; EquiNexus is rank 663 at 0.36. The public top remains 0.70, with a new 0.62 submission from Sayandeep Dutta at 14:15 UTC. Snapshot and input SHA are recorded in `docs/experiment-log.md`.
+- The revised sprint goal now continues through Friday, November 13 at 8:00 PM Toronto time. The Kaggle session is valid and daily submission capacity resets separately, but the GPU quota reset estimate remains after Friday's cutoff; use the local laptop for training before then. No OAuth request is needed.
+
+## 2026-11-09 15:43 UTC external-method and selector screen
+
+- Audited the recent public vote notebook and the V14 low-confidence YOLO sweep. The vote relies on cached test outputs from external model families and includes a CC BY-NC-SA-derived model output plus a checkpoint of unverified provenance, so those files are excluded. The V14 idea of caching detections at a low floor before threshold sweeps is eligible for an independent grouped-OOF experiment, but its own local 15% unstratified split/scorer is not comparable. The author also published a scratch U-Net using annotator-union targets without an official PQ result; our existing consensus branch already covers that target idea.
+- Regressed continuous component PQ contribution across the five OOF folds and screened ridge, histogram boosting, and extra trees. Extra trees scored 0.421691 OOF and 0.432926 holdout. Since it trails the current classifier by 0.001807 OOF and the holdout paired interval includes zero, keep the classifier as the primary model.
+- Full details, source hashes, and ignored reference notebook copies are in `docs/experiment-log.md`. The current selector and empty-fallback test CSVs remain the only validation-supported full-fit submission candidates; today's five slots are complete.
+
+## 2026-11-09 16:00 UTC low-confidence OOF screen
+
+- Tested detector confidence 0.25–0.50 with the existing 0.05-floor YOLO11s TTA8 OOF cache and a fixed U-Net-mask fusion setup under the official scorer. The best was 0.35 at PQ 0.404799, below the 0.415892 incumbent probability-map fusion. Higher thresholds reduce false positives but lose too many true positives; no holdout was used.
+- This confirms the public low-confidence sweep is a useful screening idea, but the alternate U-Net-mask fusion is weaker than our current probability-map fusion. The six-setting output and hash are recorded in `docs/experiment-log.md`.
+
+## 2026-11-09 16:16 UTC next submission batch
+
+- Prepared five complete test CSV variants for the next daily submission window: the standard selector (C=1, 0.40), the separately validated empty fallback, C=1 thresholds 0.35 and 0.50, and the grouped-OOF-screened C=4 / 0.45 variant. Counts are 1,022, 1,023, 1,045, 965, and 991 instances respectively. All have complete 180-image coverage and passed full-resolution submission validation.
+- OOF PQ values are 0.423498, 0.423636, 0.421799, 0.423053, and 0.423515. Only the standard selector and fallback have fixed-holdout scores; keep the standard selector as primary because the fallback point gain is tiny and the C=4 OOF gain over C=1 is only 0.000017. Do not interpret the test-only CSVs as scored.
+- Today's five Kaggle submissions are complete, so this batch is queued locally. Its run metadata is ignored under `artifacts/submissions/`; no data or predictions are tracked.

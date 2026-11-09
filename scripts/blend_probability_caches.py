@@ -24,7 +24,13 @@ def _digest(path: Path) -> str:
 
 def _split_digest(metrics: dict) -> str:
     split = metrics.get("split", {})
-    return str(split.get("sha256") or metrics.get("split_sha256") or "")
+    return str(
+        split.get("sha256")
+        or split.get("expected_sha256")
+        or split.get("frozen_holdout_sha256")
+        or metrics.get("split_sha256")
+        or ""
+    )
 
 
 def _metrics_path(run_root: Path) -> Path:
@@ -87,8 +93,8 @@ def blend_caches(
 
     first_metrics_path = _metrics_path(first_root)
     second_metrics_path = _metrics_path(second_root)
-    first_metrics = json.loads(first_metrics_path.read_text(encoding="utf-8"))
-    second_metrics = json.loads(second_metrics_path.read_text(encoding="utf-8"))
+    first_metrics = json.loads(first_metrics_path.read_text(encoding="utf-8-sig"))
+    second_metrics = json.loads(second_metrics_path.read_text(encoding="utf-8-sig"))
     if _split_digest(first_metrics) != split.sha256 or _split_digest(second_metrics) != split.sha256:
         raise RuntimeError("Both source runs must use the frozen holdout split")
     first_cache = first_cache_dir

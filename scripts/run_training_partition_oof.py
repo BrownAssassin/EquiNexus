@@ -29,6 +29,7 @@ if __name__ == "__main__":
     parser.add_argument("--batch-size", type=int, default=2)
     parser.add_argument("--patch-size", type=int, default=512)
     parser.add_argument("--base-channels", type=int, default=16)
+    parser.add_argument("--training-seed", type=int, default=None)
     parser.add_argument(
         "--model-type",
         choices=("unet", "dinov2_vits14", "smp_unet_resnet34"),
@@ -64,6 +65,7 @@ if __name__ == "__main__":
         batch_size=args.batch_size,
         patch_size=args.patch_size,
         base_channels=args.base_channels,
+        training_seed=args.training_seed,
         model_type=args.model_type,
         pretrained_backbone=args.pretrained_backbone,
         hub_repository=args.hub_repository,
