@@ -451,3 +451,76 @@ The submission manifest and scores are recorded under ignored `artifacts/submiss
 ## 2026-11-10 00:28 UTC local YOLO OOF progress
 
 - The first grouped fold completed epoch 5 at cumulative training time 4,573.6 seconds; mask mAP50 was 0.35911 and mask mAP50-95 was 0.10141. Epoch 6 is active. These are detector diagnostics only; scorer-aligned OOF results and any candidate decision remain pending. Training uses batch size 1, a 30-epoch cap, and patience 10; outputs and checkpoints remain ignored under `artifacts/detector-oof/yolo11m-seg-1536-30ep-coco-oof-20261109/`.
+
+## 2026-11-10 01:12 UTC submission and training status
+
+- The November 10 UTC batch completed with five public scores of 0.37; EquiNexus moved to rank 455 of 1,460 teams with 20 scored submissions. The public leaderboard is secondary evidence; validation decisions continue to use the frozen grouped OOF split and official scorer.
+- Five hash-locked RF blend variants for November 11 UTC passed submission preflight. Their weights, thresholds, OOF scores, manifest, and paths are recorded in `docs/experiment-log.md`; holdout PQ is intentionally absent. One-time tasks are set for a commit/push and manifest update at 20:05 Toronto time, upload at 20:20, and leaderboard refresh at 21:00 on November 10.
+- The team roster includes all three expected Kaggle accounts: `arvbali`, `lolmrdabbydab`, and `mrinanksivakumar`.
+- The local YOLO11m-seg run remains active at epoch 6 after epoch 5 reached mask mAP50 0.35911 and mAP50-95 0.10141. GPU usage is near full capacity on the 8 GB RTX 5070; AC sleep is disabled, so the run can continue while unattended. No scorer result is available yet.
+
+## 2026-11-10 01:24 UTC YOLO OOF progress
+
+- The first grouped fold completed epoch 6 at 8,327.09 seconds cumulative training time. Mask mAP50 reached 0.40753 and mask mAP50-95 0.11446; epoch 7 is active. These are detector diagnostics, not challenge PQ, and the fixed holdout remains excluded.
+- The 1536-pixel, batch-size-1 run is using about 7.8 GiB of the RTX 5070's 8.15 GiB and 95-100% GPU utilization. It remains active on AC power. Scorer-aligned OOF results will be measured after all folds finish.
+
+## 2026-11-10 01:33 UTC leaderboard status
+
+- The latest 1,460-team snapshot is unchanged: EquiNexus rank 455 at 0.37 from 20 submissions. The official team row lists all three expected users. The top public score remains 0.70; no new high-scoring submission or public kernel was found in this refresh.
+- Snapshot path and SHA-256 are recorded in `docs/experiment-log.md`.
+
+## 2026-11-10 01:36 UTC public kernel review
+
+- Reviewed three public approaches: a crop-trained semantic U-Net, grouped RF-DETR-Seg, and YOLO plus ResNet18 crop refinement. Their last runs were in July; they do not report comparable PQ on the current scorer. The grouped RF-DETR split and crop-refinement design are useful references. Its Dice-proxy threshold still needs scorer-aligned reproduction; the official RF-DETR repository confirms Apache-2.0 code and segmentation weights.
+- The official metric changed from Dice to PQ on Aug 7, with leaderboard rescoring announced Aug 12. I downloaded notebook source only; no public predictions, checkpoints, or test labels were used. Audit paths and source links are in `docs/experiment-log.md`.
+
+## 2026-11-10 01:50 UTC Kaggle YOLO OOF score
+
+- Applied the official scorer to the completed Kaggle YOLO11m 1024px grouped OOF predictions. Best PQ is 0.365169 at confidence 0.25 / minimum area 400, below the incumbent grouped OOF selector result of 0.424791; reject this YOLO configuration.
+- The sweep used the 565-observation OOF partition and 922 annotator views only, with no holdout or test labels. Prediction and manifest hashes, scorer output, and site/year summaries are in ignored `artifacts/model-experiments/yolo11m-kaggle-1024-oof-score-20261110/`.
+- Stopped the local YOLO11m 1536px run after seven epochs on fold 0: matched-fold PQ was 0.325708 versus 0.348854 for the completed Kaggle 1024px model. The larger model increased TP but also produced substantially more FP; reject it and preserve the checkpoint plus fold comparison under ignored `artifacts/model-experiments/yolo1536-fold0-diagnostic-20261110/`.
+
+## 2026-11-10 02:10 UTC selector sweep and next batch
+
+- A 273-setting fine sweep improved the highest grouped OOF score only slightly, from 0.424791 to 0.424860 at RF blend weight 0.35 / threshold 0.455. The difference is marginal and requires leaderboard evidence; no holdout or test labels were used.
+- Prepared five distinct, unseen candidates for the Nov 12 UTC submission window. Preflight confirms 180 supplied test images per CSV, five unique hashes, the expected submission schema, and frozen split digest. The dynamic batch builder reads the complete sweep and records past settings so later batches do not repeat earlier submissions.
+- Latest leaderboard remains rank 455 / 0.37 for EquiNexus among 1,461 teams and 20 submissions. The full snapshot, hashes, candidate settings, and paths are in `docs/experiment-log.md`.
+- The local torchvision Mask R-CNN ResNet-50 FPN V2 run is training from official COCO weights on 565 grouped training observations and scoring all views of the fixed 142-observation holdout. At epoch 2 it reached PQ 0.311350 (1,047 TP, 1,378 FP, 754 FN), up from 0.267843 at epoch 1 but still below the RF selector's 0.434930 holdout score. The eight-epoch run remains active; it has not been used to generate a submission. Details and provenance are in the dated experiment-log entry.
+
+## 2026-11-10 03:05 UTC model and submission status
+
+- The grouped Mask R-CNN finished with best holdout PQ 0.331323 at epoch 4 and was rejected against the 0.434930 RF selector baseline. Its full diagnostics, per-observation scores, checkpoint hashes, and visual overlays are archived under the ignored run directory. Public crop-refiner code remains a possible follow-up only if refinement improves official grouped PQ.
+- Five unique grouped-OOF candidates passed preflight for each of Nov 13 and Nov 14 UTC. The final Nov 14 UTC batch is scheduled for 7:20 PM Toronto time on Nov 13, before the 8:00 PM sprint cutoff. The source commit will be updated by the scheduled daily checkpoint before upload.
+- The official team row lists `arvbali`, `lolmrdabbydab`, and `mrinanksivakumar`; the user confirmed the three-account roster is expected.
+
+## 2026-11-10 03:45 UTC crop-refiner follow-up
+
+- An eight-epoch, random-initialized ResNet-18 U-Net trained on 4,449 grouped training-instance crops raised Mask R-CNN holdout PQ from 0.331323 to 0.389061. It still trails the 0.434930 selector baseline; the remaining 1,184 FP and visual 18-versus-11 prediction count on a dense sample confirm the quality gap. No test output was generated and no candidate was submitted.
+- The ResNet-18 refiner used random initialization, with no external refiner weights or supervised labels. Its Mask R-CNN proposal source used official Torchvision COCO initialization and was fine-tuned only on the grouped competition-training partition. Checkpoint and complete scorer artifacts are in the ignored `maskrcnn-r50fpn-v2-gt-crop-refiner-256-holdout-20261110` run directory. The first failed attempt is archived separately and has no metric or candidate status.
+
+## 2026-11-10 03:59 UTC detector-selector fusion screen
+
+- A small holdout-only fusion screen of the crop-refiner detector with the incumbent RF selector peaked at PQ 0.435486 versus 0.434930 for the selector. Observation-grouped bootstrap uncertainty spans zero (95% CI -0.006000 to +0.007184; improvement probability 0.5704), so the apparent lift is noise-level and is not a submission candidate. No test images or labels were used; see the experiment log for hashes and the full sweep.
+
+## 2026-11-10 04:27 UTC inference review and ImageNet refiner
+
+- A fresh leaderboard snapshot places EquiNexus at rank 456 of 1,462 teams, score 0.37, with 20 submissions. All three expected accounts are listed. The public archive and hash are recorded in the experiment log.
+- Reviewed the Apache-2.0 Mask R-CNN/crop-refiner notebook and topology-safe inference handoff. Reproduced their four-flip TTA and guard ideas using our own checkpoints. The best TTA mode scored 0.390995 versus 0.389061 single-pass, with a paired observation-bootstrap 95% interval of +0.000147 to +0.003680; because this is best-of-modes on the fixed holdout, it remains exploratory. The refiner still trails the selector at 0.434930, so no submission is warranted.
+- The Torchvision ImageNet ResNet18 initialization passed a mixed-precision GPU smoke step. Full grouped training is running against the fixed split; the local RTX 5070 has 8.15 GiB and the run output/checkpoint remain under ignored `artifacts/`. It uses no external labels and does not access public MAGFiLO labels.
+
+## 2026-11-10 04:52 UTC ImageNet refiner eligibility decision
+
+- The eight-epoch ImageNet-initialized crop refiner scored 0.392410 PQ, a paired +0.003349 versus the scratch refiner (95% interval -0.000171 to +0.007006) and -0.042520 versus the 0.434930 RF selector incumbent (95% interval -0.057001 to -0.028055). The small scratch comparison is inconclusive and the candidate remains well below the incumbent.
+- The official ImageNet agreement restricts the source database to non-commercial research and education. Given the prize context and our prior exclusion of non-commercial pretraining unless clarified, this run is excluded from competition use. No submission or test prediction used it. The fine-tuned checkpoint and downloaded ImageNet weights remain in ignored workspace paths because automatic safety review blocked their deletion; metadata records their hashes and exclusion. Do not use those files.
+- The committed refiner runner is scratch-only, and its smoke check passes. The holdout, seed, official scorer, and test data boundary remain unchanged.
+
+## 2026-11-10 05:21 UTC all-annotator crop-refiner result
+
+- Training on all 922 annotator views of the 565 grouped training observations produced 6,488 crops and 0.390305 holdout PQ at epoch 8. The selected-view scratch refiner reached 0.389061; their paired delta is +0.001245 with a 95% observation-bootstrap interval of -0.001513 to +0.003952, so the increase is inconclusive.
+- The all-view refiner remains 0.044625 below the 0.434930 selector incumbent. It is rejected as a submission candidate; the model, per-observation comparisons, overlays, runtime, and GPU memory stay under ignored `artifacts/`.
+
+## 2026-11-11 02:45 UTC all-view Mask R-CNN and selector fusion
+
+- Training the detector on all 922 annotation views improved its holdout PQ by 0.019979 over selected-view training (paired 95% interval +0.009158 to +0.030748), but it still scored 0.351302 versus 0.434930 for the selector. It is not a submission candidate.
+- Four selector/detector fusion policies at two IoU gates did not improve the selector. The best was identical to the selector at 0.434930; intersection, union, and replacement reduced PQ. No test data were accessed, and no candidate was submitted.
+- See the experiment log for checkpoint and script hashes, paired-bootstrap details, and artifact paths.
