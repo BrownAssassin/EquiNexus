@@ -8,8 +8,12 @@ import csv
 import hashlib
 import json
 import platform
+import sys
 import time
 from pathlib import Path
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(REPO_ROOT / "src"))
 
 import cv2
 import pandas as pd
@@ -26,7 +30,6 @@ from filament_baseline.external_panoptic import (
 from filament_baseline.runtime import hardware_info, package_versions
 
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
 MODEL_SOURCE = "phuongncn/solar-filament-i079-weights/PyTorch/detector-refiner/1"
 
 

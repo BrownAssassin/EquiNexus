@@ -93,6 +93,13 @@ def export_yolo_dataset(
         raise ValueError(f"Exported detector data must remain under data/processed: {output_root}")
     if limit_per_partition is not None and limit_per_partition < 1:
         raise ValueError("limit_per_partition must be positive")
+    for partition in ("train", "val"):
+        for kind in ("images", "labels"):
+            stale_partition = output_root / kind / partition
+            if not _within(stale_partition, output_root):
+                raise ValueError(f"Generated partition escaped the export root: {stale_partition}")
+            if stale_partition.exists():
+                shutil.rmtree(stale_partition)
     rows = []
     counts = {"train": {"views": 0, "instances": 0}, "val": {"views": 0, "instances": 0}}
     partitions = {"train": set(split.training_names), "val": set(split.validation_names)}

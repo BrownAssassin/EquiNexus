@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import csv
 import json
 import sys
@@ -105,6 +106,7 @@ def main() -> int:
 
     results = []
     best_rows = None
+    best_observations = None
     for confidence in confidence_thresholds:
         for minimum_area in minimum_areas:
             metrics, rows, prediction_count = score_detector_predictions(
@@ -130,6 +132,22 @@ def main() -> int:
             )
             if best_rows is None or metrics["global"]["pq"] > best_rows["metrics"]["global"]["pq"]:
                 best_rows = row
+                best_observations = [
+                    {
+                        "file_name": item.file_name,
+                        "year": item.year,
+                        "site": item.site,
+                        "annotator_views": item.annotator_views,
+                        "gt_count": item.gt_count,
+                        "prediction_count": item.prediction_count,
+                        "tp": item.tp,
+                        "tp_iou_sum": item.tp_iou_sum,
+                        "fp": item.fp,
+                        "fn": item.fn,
+                        "pq": item.pq,
+                    }
+                    for item in rows
+                ]
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     result = {
@@ -137,7 +155,9 @@ def main() -> int:
         "validation_observations": len(split.validation_names),
         "ground_truth_source": "competition-provided training annotations only",
         "prediction_source": str(predictions_path),
+        "scorer_script_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
         "best": best_rows,
+        "per_observation": best_observations,
         "sweep": results,
     }
     output_path.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")

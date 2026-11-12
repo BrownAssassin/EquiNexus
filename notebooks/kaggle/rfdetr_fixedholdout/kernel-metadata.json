@@ -1,0 +1,17 @@
+{
+  "id": "mrinanksivakumar/equinexus-rfdetr-fixedholdout-20261112",
+  "title": "EquiNexus RFDETR FixedHoldout 20261112",
+  "code_file": "rfdetr_fixedholdout.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_tpu": false,
+  "enable_internet": true,
+  "keywords": ["gpu"],
+  "dataset_sources": [],
+  "kernel_sources": [],
+  "competition_sources": ["filament-segmentation-2026"],
+  "model_sources": [],
+  "machine_shape": "NvidiaTeslaT4"
+}

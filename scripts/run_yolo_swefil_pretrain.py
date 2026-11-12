@@ -9,6 +9,7 @@ import hashlib
 import json
 import os
 import random
+import re
 import sys
 import time
 from pathlib import Path
@@ -21,7 +22,11 @@ sys.path.insert(0, str(REPO_ROOT / "src"))
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
 from filament_baseline.data import load_dataset
-from filament_baseline.external_data import load_swefil_dataset
+from filament_baseline.external_data import (
+    load_kso_weak_dataset,
+    load_morden_ahas_dataset,
+    load_swefil_dataset,
+)
 from filament_baseline.runtime import hardware_info, package_versions
 from filament_baseline.split import ObservationSplit, create_observation_split
 from export_yolo_dataset import export_yolo_dataset
@@ -35,20 +40,31 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _calendar_date(name: str, source_key: str) -> str:
+    stem = Path(name).stem
+    if source_key == "morden":
+        match = re.search(r"RSM(\d{8})T", stem)
+        if match is None:
+            raise ValueError(f"Could not extract the MORDEN UTC date from {name!r}")
+        return match.group(1)
+    return stem[:8]
+
+
 def _date_group_split(
     dataset,
     manifest_path: Path,
     *,
     seed: int,
     validation_fraction: float,
+    source_key: str,
 ) -> ObservationSplit:
-    days = {name: Path(name).stem[:8] for name in dataset.observation_names}
+    days = {name: _calendar_date(name, source_key) for name in dataset.observation_names}
     unique_days = sorted(set(days.values()))
     validation_days = {
         day
         for day in unique_days
         if int.from_bytes(
-            hashlib.sha256(f"swefil-yolo-date-split-{seed}:{day}".encode()).digest()[:8],
+            hashlib.sha256(f"{source_key}-yolo-date-split-{seed}:{day}".encode()).digest()[:8],
             "big",
         )
         / 2**64
@@ -95,7 +111,12 @@ def _date_group_split(
 def run(args: argparse.Namespace) -> dict[str, Any]:
     repo_root = args.repo_root.expanduser().resolve()
     data_root = (args.data_root or repo_root / "data" / "raw" / "MAGFiLO_1.0_Kaggle_2026").expanduser().resolve()
-    swefil_root = (args.swefil_root or repo_root / "data" / "external" / "SWEFil").expanduser().resolve()
+    if args.external_source == "swefil":
+        external_root = (args.swefil_root or repo_root / "data" / "external" / "SWEFil").expanduser().resolve()
+    elif args.external_source == "kso":
+        external_root = (args.kso_root or repo_root / "data" / "external" / "kso-weak-2023").expanduser().resolve()
+    else:
+        external_root = (args.morden_root or repo_root / "data" / "external" / "morden-zenodo-21582245").expanduser().resolve()
     model_path = args.model.expanduser().resolve()
     run_root = (repo_root / "artifacts" / "detector-experiments" / args.run_name).resolve()
     export_root = (repo_root / "data" / "processed" / "yolo" / f"{args.run_name}-external-data").resolve()
@@ -109,13 +130,13 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     if not data_root.is_dir():
         raise FileNotFoundError(f"Competition input directory does not exist: {data_root}")
     kaggle_input_root = Path("/kaggle/input").resolve()
-    if not swefil_root.is_relative_to(repo_root / "data" / "external") and not swefil_root.is_relative_to(kaggle_input_root):
+    if not external_root.is_relative_to(repo_root / "data" / "external") and not external_root.is_relative_to(kaggle_input_root):
         raise ValueError(
-            "SWEFil must be inside the workspace data/external folder or a read-only Kaggle input: "
-            f"{swefil_root}"
+            "External labels must be inside the workspace data/external folder or a read-only Kaggle input: "
+            f"{external_root}"
         )
-    if not swefil_root.is_dir():
-        raise FileNotFoundError(f"SWEFil input directory does not exist: {swefil_root}")
+    if not external_root.is_dir():
+        raise FileNotFoundError(f"External data directory does not exist: {external_root}")
     if not model_path.is_file():
         raise FileNotFoundError(f"Initial model checkpoint is missing: {model_path}")
     run_root.mkdir(parents=True, exist_ok=True)
@@ -129,31 +150,48 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     )
     if frozen.sha256 != config["expected_split_sha256"]:
         raise RuntimeError("Frozen holdout digest changed before external pretraining")
-    external, provenance = load_swefil_dataset(
-        swefil_root,
-        competition,
-        frozen,
-        repository_root=repo_root,
-        exclude_all_competition_dates=True,
-        allow_readonly_external_root=swefil_root.is_relative_to(kaggle_input_root),
-    )
-    if provenance["included_observations"] != 229:
+    if args.external_source == "swefil":
+        external, provenance = load_swefil_dataset(
+            external_root,
+            competition,
+            frozen,
+            repository_root=repo_root,
+            exclude_all_competition_dates=True,
+            allow_readonly_external_root=external_root.is_relative_to(kaggle_input_root),
+        )
+    elif args.external_source == "kso":
+        external, provenance = load_kso_weak_dataset(
+            external_root,
+            competition,
+            frozen,
+            repository_root=repo_root,
+            allow_readonly_external_root=external_root.is_relative_to(kaggle_input_root),
+        )
+    else:
+        external, provenance = load_morden_ahas_dataset(
+            external_root,
+            competition,
+            repository_root=repo_root,
+        )
+    if args.external_source == "swefil" and provenance["included_observations"] != 229:
         raise ValueError(
             "Expected the audited 229-image, all-competition-date-disjoint SWEFil sample; "
             f"found {provenance['included_observations']}"
         )
-    audit_path = swefil_root / "equinexus_audit_all_competition_dates_excluded.json"
-    if not audit_path.is_file():
-        raise FileNotFoundError(f"Strict SWEFil audit is missing: {audit_path}")
-    audit = json.loads(audit_path.read_text(encoding="utf-8"))
-    if audit.get("included_manifest_sha256") != provenance["included_manifest_sha256"]:
-        raise ValueError("SWEFil strict date-disjoint audit does not match the training sample")
+    if args.external_source == "swefil":
+        audit_path = external_root / "equinexus_audit_all_competition_dates_excluded.json"
+        if not audit_path.is_file():
+            raise FileNotFoundError(f"Strict SWEFil audit is missing: {audit_path}")
+        audit = json.loads(audit_path.read_text(encoding="utf-8"))
+        if audit.get("included_manifest_sha256") != provenance["included_manifest_sha256"]:
+            raise ValueError("SWEFil strict date-disjoint audit does not match the training sample")
 
     split = _date_group_split(
         external,
         repo_root / "data" / "splits" / f"{args.run_name}-date-grouped.csv",
         seed=int(config["seed"]),
         validation_fraction=0.2,
+        source_key=args.external_source,
     )
     export_manifest = export_yolo_dataset(external, split, export_root)
     export_manifest.pop("views", None)
@@ -171,7 +209,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                 "train_observations": len(split.training_names),
                 "validation_observations": len(split.validation_names),
                 "validation_days": len(
-                    {Path(name).stem[:8] for name in split.validation_names}
+                    {_calendar_date(name, args.external_source) for name in split.validation_names}
                 ),
             },
             "export": export_manifest,
@@ -263,7 +301,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         "source_bundle_sha256": os.environ.get("EQUINEXUS_SOURCE_BUNDLE_SHA256"),
         "frozen_holdout_sha256": frozen.sha256,
         "frozen_holdout_used_for_training_or_selection": False,
-        "training_data": "SWEFil CC-BY-4.0 external annotations only",
+        "training_data": provenance.get("name", args.external_source),
         "training_observations": len(split.training_names),
         "validation_observations": len(split.validation_names),
         "external_data_provenance": str((run_root / "external-data-provenance.json").relative_to(repo_root)),
@@ -299,11 +337,14 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Pretrain YOLO11-seg on date-disjoint, separately licensed SWEFil masks."
+        description="Pretrain YOLO11-seg on date-disjoint, separately licensed solar filament masks."
     )
     parser.add_argument("--repo-root", type=Path, default=REPO_ROOT)
     parser.add_argument("--data-root", type=Path, default=None)
     parser.add_argument("--swefil-root", type=Path, default=None)
+    parser.add_argument("--kso-root", type=Path, default=None)
+    parser.add_argument("--morden-root", type=Path, default=None)
+    parser.add_argument("--external-source", choices=("swefil", "kso", "morden"), default="swefil")
     parser.add_argument("--model", type=Path, default=REPO_ROOT / "weights" / "yolo11s-seg.pt")
     parser.add_argument("--run-name", default="yolo11s-seg-swefil-pretrain")
     parser.add_argument("--image-size", type=int, default=1024)

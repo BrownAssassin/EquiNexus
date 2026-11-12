@@ -8,6 +8,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import platform
 import sys
 import time
 from pathlib import Path
@@ -15,6 +16,7 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
+import lightgbm as lgb
 from sklearn.ensemble import ExtraTreesRegressor, HistGradientBoostingRegressor
 from sklearn.linear_model import Ridge
 from sklearn.preprocessing import StandardScaler
@@ -32,6 +34,22 @@ from filament_baseline.data import load_dataset  # noqa: E402
 from filament_baseline.runner import _write_observation_scores, _write_predictions  # noqa: E402
 from filament_baseline.scorer import score_validation  # noqa: E402
 from filament_baseline.split import create_observation_split  # noqa: E402
+
+
+LIGHTGBM_REGRESSOR_CONFIGS: dict[str, dict[str, Any]] = {
+    "lightgbm_leaf3_min25": {
+        "n_estimators": 250, "learning_rate": 0.03, "num_leaves": 3,
+        "max_depth": 2, "min_child_samples": 25, "reg_lambda": 4.0,
+    },
+    "lightgbm_leaf7_min30": {
+        "n_estimators": 250, "learning_rate": 0.03, "num_leaves": 7,
+        "max_depth": 3, "min_child_samples": 30, "reg_lambda": 5.0,
+    },
+    "lightgbm_leaf15_min50": {
+        "n_estimators": 250, "learning_rate": 0.03, "num_leaves": 15,
+        "max_depth": 4, "min_child_samples": 50, "reg_lambda": 8.0,
+    },
+}
 
 
 def sha256(path: Path) -> str:
@@ -84,6 +102,23 @@ def fit_regressor(
         model.fit(x_train, y_train, sample_weight=weights)
         result = model.predict(x_eval)
         metadata = {"family": name, "n_estimators": 300, "max_depth": 6}
+    elif name in LIGHTGBM_REGRESSOR_CONFIGS:
+        config = LIGHTGBM_REGRESSOR_CONFIGS[name]
+        model = lgb.LGBMRegressor(
+            **config,
+            objective="regression_l2",
+            n_jobs=4,
+            random_state=42,
+            verbosity=-1,
+            deterministic=True,
+            force_col_wise=True,
+            subsample=0.9,
+            subsample_freq=1,
+            colsample_bytree=0.9,
+        )
+        model.fit(x_train, y_train, sample_weight=weights)
+        result = model.predict(x_eval)
+        metadata = {"family": name, **config, "objective": "regression_l2"}
     else:
         raise ValueError(f"Unknown regressor: {name}")
 
@@ -176,7 +211,10 @@ def main() -> int:
     holdout_mask_path = REPO_ROOT / "artifacts/model-experiments/yolo11s-25perann-75consensus-foldmeans-valid-holdout-th035-a200/predictions.csv"
     oof_masks = load_prediction_rows(oof_mask_path, {Path(name).stem for name in oof_names})
     holdout_masks = load_prediction_rows(holdout_mask_path, {Path(name).stem for name in holdout_names})
-    model_names = ("ridge", "hist_gradient_boosting", "extra_trees")
+    model_names = (
+        "ridge", "hist_gradient_boosting", "extra_trees",
+        *LIGHTGBM_REGRESSOR_CONFIGS.keys(),
+    )
     quantiles = np.linspace(0.0, 1.0, 11)
     output_dir.mkdir(parents=True, exist_ok=True)
     sweep_rows: list[dict[str, Any]] = []
@@ -254,6 +292,9 @@ def main() -> int:
         },
         "target": "continuous component marginal PQ contribution (keep_delta_pq)",
         "model_families": list(model_names),
+        "lightgbm_version": lgb.__version__,
+        "python_version": platform.python_version(),
+        "execution_device": "CPU",
         "threshold_quantiles": [float(value) for value in quantiles],
         "selected_model": best_model,
         "selected_threshold": best_threshold,

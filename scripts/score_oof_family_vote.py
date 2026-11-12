@@ -3,6 +3,7 @@ from __future__ import annotations
 # Copyright (C) 2026 EquiNexus contributors
 # SPDX-License-Identifier: AGPL-3.0-only
 
+import argparse
 import csv
 from datetime import datetime, timezone
 import hashlib
@@ -38,7 +39,12 @@ def decode_rle(counts: str) -> dict:
     return {"size": list(SHAPE), "counts": counts.encode("ascii")}
 
 
-def load_detector(path: Path, confidence: float, stems: set[str]) -> dict[str, list[dict]]:
+def load_detector(
+    path: Path,
+    confidence: float,
+    stems: set[str],
+    minimum_area: int = 0,
+) -> dict[str, list[dict]]:
     raw = json.loads(path.read_text(encoding="utf-8"))
     if set(raw) != stems:
         raise ValueError(f"{path.name} observation coverage differs")
@@ -49,7 +55,10 @@ def load_detector(path: Path, confidence: float, stems: set[str]) -> dict[str, l
             if float(item["score"]) < confidence:
                 continue
             rle = decode_rle(str(item["counts"]))
-            if tuple(rle["size"]) != SHAPE or int(mask_utils.area(rle)) == 0:
+            if tuple(rle["size"]) != SHAPE:
+                continue
+            area = int(mask_utils.area(rle))
+            if area == 0 or area < minimum_area:
                 continue
             rows.append({"family": "", "rle": rle, "score": float(item["score"]), "index": index})
         result[stem] = rows
@@ -83,7 +92,46 @@ def as_predictions(stem: str, rles: list[dict]) -> list[PredictedInstance]:
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="Score a family-vote rule on cross-fitted training-partition predictions."
+    )
+    parser.add_argument("--min-family-votes", type=int, choices=(2, 3), default=2)
+    parser.add_argument(
+        "--unet-predictions",
+        type=Path,
+        default=ROOT / "artifacts/oof-experiments/oof-blend-perann10k-tta8-p50-consensus512-5k-tta4/oof-predictions.csv",
+    )
+    parser.add_argument(
+        "--yolo11m-predictions",
+        type=Path,
+        default=ROOT / "artifacts/detector-oof/yolo11m-seg-1024-30ep-coco-oof-local/oof_detections.json",
+    )
+    parser.add_argument("--yolo11m-confidence", type=float, default=0.20)
+    parser.add_argument("--yolo11m-minimum-area", type=int, default=0)
+    parser.add_argument(
+        "--strict-support-iou",
+        type=float,
+        default=None,
+        help="Require every supporting family to meet this IoU when support equals the minimum quorum.",
+    )
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
+        default=OUTPUT,
+        help="Ignored artifact directory for predictions and the run report.",
+    )
+    args = parser.parse_args()
     started = time.perf_counter()
+    unet_predictions_path = args.unet_predictions.expanduser().resolve()
+    yolo11m_predictions_path = args.yolo11m_predictions.expanduser().resolve()
+    if not unet_predictions_path.is_relative_to(ROOT / "artifacts"):
+        raise ValueError("U-Net predictions must remain under artifacts/")
+    if not yolo11m_predictions_path.is_relative_to(ROOT / "artifacts"):
+        raise ValueError("YOLO11m predictions must remain under artifacts/")
+    if not 0.0 <= args.yolo11m_confidence <= 1.0:
+        raise ValueError("YOLO11m confidence must be in [0, 1]")
+    if args.yolo11m_minimum_area < 0:
+        raise ValueError("YOLO11m minimum area must be nonnegative")
     dataset = load_dataset(DATA_ROOT)
     frozen = create_observation_split(dataset, ROOT / "data" / "splits", seed=42, validation_fraction=0.2)
     if frozen.sha256 != EXPECTED_SPLIT:
@@ -100,20 +148,29 @@ def main() -> None:
             0.35, stems,
         ),
         "unet": load_unet(
-            ROOT / "artifacts/oof-experiments/oof-blend-perann10k-tta8-p50-consensus512-5k-tta4/oof-predictions.csv",
+            unet_predictions_path,
             stems,
         ),
         "yolo11m": load_detector(
-            ROOT / "artifacts/detector-oof/yolo11m-seg-1024-30ep-coco-oof-local/oof_detections.json",
-            0.20, stems,
+            yolo11m_predictions_path,
+            args.yolo11m_confidence,
+            stems,
+            args.yolo11m_minimum_area,
         ),
     }
     quality_order = ["yolo11s", "unet", "yolo11m"]
-    family_metrics = {
-        "yolo11s": json.loads((ROOT / "artifacts/detector-oof/yolo11s-seg-1280-40ep-coco-oof-tta8/dedup-iou-030/scoring/oof-score.json").read_text(encoding="utf-8"))["best"]["metrics"]["global"],
-        "unet": json.loads((ROOT / "artifacts/detector-oof/yolo11m-seg-1024-30ep-coco-oof-local/fusion-oof/fusion-oof-sweep.json").read_text(encoding="utf-8"))["unet_baseline_metrics"]["global"],
-        "yolo11m": json.loads((ROOT / "artifacts/detector-oof/yolo11m-seg-1024-30ep-coco-oof-local/scoring/oof-score.json").read_text(encoding="utf-8"))["best"]["metrics"]["global"],
-    }
+    family_metrics = {}
+    for family in quality_order:
+        family_predictions = {
+            name: as_predictions(
+                Path(name).stem,
+                [item["rle"] for item in sources[family][Path(name).stem]],
+            )
+            for name in names
+        }
+        metrics, _ = score_validation(dataset, family_predictions, names)
+        family_metrics[family] = metrics["global"]
+        del family_predictions
 
     voted: dict[str, list[dict]] = {}
     vote_histogram: dict[str, int] = {}
@@ -131,18 +188,32 @@ def main() -> None:
         for item in candidates:
             family = item["family"]
             support = 1
+            support_ious = []
             for other in quality_order:
                 if other == family or not other_rles[other]:
                     continue
                 overlaps = mask_utils.iou([item["rle"]], other_rles[other], [0] * len(other_rles[other]))
-                support += int(bool(np.any(np.asarray(overlaps) > 0.5)))
+                best_iou = float(np.max(overlaps)) if len(overlaps) else 0.0
+                if best_iou > 0.5:
+                    support += 1
+                    support_ious.append(best_iou)
             item["votes"] = support
+            item["support_ious"] = support_ious
         priority = {family: index for index, family in enumerate(quality_order)}
         candidates.sort(key=lambda item: (priority[item["family"]], -item["score"], item["index"]))
         selected = []
         taken = np.zeros(SHAPE, dtype=bool)
         for item in candidates:
-            if item["votes"] < 2:
+            if item["votes"] < args.min_family_votes:
+                continue
+            if (
+                args.strict_support_iou is not None
+                and item["votes"] == args.min_family_votes
+                and (
+                    not item["support_ious"]
+                    or min(item["support_ious"]) < args.strict_support_iou
+                )
+            ):
                 continue
             mask = mask_utils.decode(item["rle"]).astype(bool)
             area = int(mask.sum())
@@ -167,13 +238,14 @@ def main() -> None:
 
     predictions = {name: as_predictions(Path(name).stem, voted[Path(name).stem]) for name in names}
     metrics, rows = score_validation(dataset, predictions, names)
-    OUTPUT.mkdir(parents=True, exist_ok=True)
-    _write_predictions(OUTPUT / "family-vote-oof-predictions.csv", predictions)
+    output_dir = args.output_dir
+    output_dir.mkdir(parents=True, exist_ok=True)
+    _write_predictions(output_dir / "family-vote-oof-predictions.csv", predictions)
     source_files = {
         "oof_manifest": MANIFEST,
         "yolo11s_deduplicated_oof": ROOT / "artifacts/detector-oof/yolo11s-seg-1280-40ep-coco-oof-tta8/dedup-iou-030/oof_detections.json",
-        "unet_oof_csv": ROOT / "artifacts/oof-experiments/oof-blend-perann10k-tta8-p50-consensus512-5k-tta4/oof-predictions.csv",
-        "yolo11m_oof": ROOT / "artifacts/detector-oof/yolo11m-seg-1024-30ep-coco-oof-local/oof_detections.json",
+        "unet_oof_csv": unet_predictions_path,
+        "yolo11m_oof": yolo11m_predictions_path,
     }
     source_hashes = {
         key: hashlib.sha256(path.read_bytes()).hexdigest()
@@ -183,9 +255,16 @@ def main() -> None:
         ["git", "rev-parse", "HEAD"], cwd=ROOT, check=True, capture_output=True, text=True
     ).stdout.strip()
     report = {
-        "method": "three-family majority vote, keep at least two family matches at IoU > 0.5; clip overlaps; backfill empty observations",
+        "method": "family vote; clip overlaps; backfill empty observations",
         "families": quality_order,
-        "confidence_thresholds": {"yolo11s": 0.35, "yolo11m": 0.20, "unet": "existing fixed OOF CSV"},
+        "minimum_family_votes": args.min_family_votes,
+        "strict_support_iou": args.strict_support_iou,
+        "confidence_thresholds": {
+            "yolo11s": 0.35,
+            "yolo11m": args.yolo11m_confidence,
+            "yolo11m_minimum_area": args.yolo11m_minimum_area,
+            "unet": str(unet_predictions_path.relative_to(ROOT)),
+        },
         "source_commit": git_commit,
         "source_script_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
         "created_utc": datetime.now(timezone.utc).isoformat(),
@@ -219,7 +298,7 @@ def main() -> None:
         "per_observation_pq_mean": float(np.mean([row.pq for row in rows])),
         "per_observation_pq_median": float(np.median([row.pq for row in rows])),
     }
-    (OUTPUT / "family-vote-report.json").write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    (output_dir / "family-vote-report.json").write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     print(json.dumps(report, indent=2, sort_keys=True))
 
 

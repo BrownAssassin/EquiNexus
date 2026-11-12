@@ -1,0 +1,23 @@
+{
+  "id": "mrinanksivakumar/equinexus-public-unet-fold-aware-holdout-20261111",
+  "title": "EquiNexus Public Unet Fold Aware Holdout 20261111",
+  "code_file": "public_unet_fold_aware.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_tpu": false,
+  "enable_internet": true,
+  "keywords": [
+    "gpu"
+  ],
+  "dataset_sources": [
+    "dariushafshar/solar-filament-unet-weights"
+  ],
+  "kernel_sources": [],
+  "competition_sources": [
+    "filament-segmentation-2026"
+  ],
+  "model_sources": [],
+  "machine_shape": "NvidiaTeslaT4"
+}

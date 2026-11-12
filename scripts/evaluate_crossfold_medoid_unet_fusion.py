@@ -357,7 +357,7 @@ def main() -> int:
             "reported_public_score": 0.39,
             "method_adapted": "cross-fold Hungarian association, support threshold, and medoid mask selection",
             "reference_checkpoints_or_code_used": False,
-            "reference_license_status": "weights and code are excluded; the release does not relicense upstream components and competition-derived weights have non-commercial licensing ambiguity",
+            "reference_license_status": "public reference weights are eligible under the user's policy; retain upstream license, attribution, and ShareAlike terms, and do not reuse results without a valid fold-level evaluation",
         },
         "candidate_policy": {
             "selection": "fixed public-method policy; no holdout search",

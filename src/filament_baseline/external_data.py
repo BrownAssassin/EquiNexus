@@ -4,8 +4,11 @@
 from __future__ import annotations
 
 import hashlib
+import gzip
+import io
 import json
 import re
+import struct
 import subprocess
 from collections import Counter, defaultdict
 from pathlib import Path
@@ -35,6 +38,13 @@ MORDEN_ARCHIVE_MD5 = "498e00c9837cd01d9b3763b86e98d9d0"
 MORDEN_IMAGE_PATTERN = re.compile(r"^RSM(\d{8})T\d{6}_\d{4}_HA\.png$", re.IGNORECASE)
 CHROTEL_API = "https://archive.sdc.leibniz-kis.de/api/instruments/chrotel"
 CHROTEL_LICENSE = "KIS SDC permits free scientific and educational use; cite and acknowledge ChroTel/KIS/HAO."
+KSO_IMAGE_INDEX = "https://cesar.kso.ac.at/halpha3s/FITS/arch/2023/"
+KSO_MASK_ROOT = "https://cesar.kso.ac.at/sniv/filaments/2023/"
+KSO_LICENSE = "Non-profit scientific and educational use; profit use is prohibited."
+KSO_ATTRIBUTION = (
+    "H-alpha data / filament maps were provided by the Kanzelhoehe Observatory, "
+    "University of Graz, Austria."
+)
 FROZEN_COMPETITION_SPLIT_SHA256 = "30cb2ec52437daf97e769a3a61bf83350062e6cf4f5d00af1f8399649065e48e"
 
 
@@ -845,6 +855,181 @@ def load_flat_unet_dataset(
         "competition_ground_truth_used": False,
         "source_test_gd_used": False,
         "inference_uses_external_images": False,
+    }
+    dataset = CompetitionDataset(
+        root=root,
+        train_image_dir=root / "images",
+        test_image_dir=root / "images",
+        annotation_path=manifest_path,
+        image_views=tuple(sorted(views, key=lambda view: view.file_name)),
+        annotations_by_image_id=annotations_by_id,
+        views_by_observation=dict(sorted(views_by_name.items())),
+        categories=({"id": 1, "name": "filament"},),
+    )
+    return dataset, metadata
+
+
+def load_kso_weak_dataset(
+    data_root: str | Path,
+    competition: CompetitionDataset,
+    split: ObservationSplit,
+    *,
+    repository_root: str | Path,
+    allow_readonly_external_root: bool = False,
+) -> tuple[CompetitionDataset, dict[str, Any]]:
+    """Load date-disjoint KSO H-alpha images and automatically detected labels.
+
+    The KSO binary products encode a distinct integer-valued label for each
+    detected filament. These are weak automated labels, not manual ground
+    truth. Only the exact 2023 synoptic image paired with each map is used.
+    """
+    root = Path(data_root).expanduser().resolve()
+    repository_root = Path(repository_root).expanduser().resolve()
+    kaggle_input_root = Path("/kaggle/input").resolve()
+    inside_workspace = root.is_relative_to(repository_root / "data" / "external")
+    inside_readonly_input = allow_readonly_external_root and root.is_relative_to(kaggle_input_root)
+    if not inside_workspace and not inside_readonly_input:
+        raise ValueError(f"KSO data must stay under data/external/: {root}")
+    manifest_path = root / "manifest.json"
+    if not manifest_path.is_file():
+        raise FileNotFoundError(f"KSO data manifest is missing: {manifest_path}")
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    if manifest.get("status") != "complete":
+        raise ValueError("KSO data manifest is not complete")
+    if manifest.get("competition_split_sha256") != split.sha256:
+        raise ValueError("KSO data were prepared against a different frozen split")
+    if manifest.get("competition_train_test_dates_excluded") is not True:
+        raise ValueError("KSO manifest does not certify competition-date exclusion")
+    if manifest.get("competition_ground_truth_used") is not False:
+        raise ValueError("KSO manifest must not use competition ground truth")
+
+    competition_names = set(competition.observation_names)
+    competition_names.update(
+        path.name for path in competition.test_image_dir.iterdir() if path.is_file()
+    )
+    blocked_dates = {name[:8] for name in competition_names}
+    rows = manifest.get("observations", [])
+    if not rows or len(rows) != manifest.get("selected_observations"):
+        raise ValueError("KSO manifest has no observations or an inconsistent count")
+    canonical = json.dumps(rows, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    if hashlib.sha256(canonical).hexdigest() != manifest.get("selection_manifest_sha256"):
+        raise ValueError("KSO selection manifest digest does not match its contents")
+
+    views: list[ImageView] = []
+    annotations_by_id: dict[str, tuple[dict[str, Any], ...]] = {}
+    views_by_name: dict[str, tuple[ImageView, ...]] = {}
+    included_rows: list[dict[str, Any]] = []
+    for index, row in enumerate(rows):
+        date = str(row.get("date", ""))
+        stamp = str(row.get("timestamp", ""))
+        file_name = str(row.get("file_name", ""))
+        if not re.fullmatch(r"2023\d{4}", date) or date in blocked_dates:
+            raise ValueError(f"KSO observation has an invalid or overlapping date: {date}")
+        if not re.fullmatch(r"2023\d{4}_\d{6}", stamp):
+            raise ValueError(f"Unexpected KSO timestamp: {stamp}")
+        if file_name != f"{stamp}_KSO.jpg" or Path(file_name).name != file_name:
+            raise ValueError(f"Unexpected processed KSO image name: {file_name}")
+        image_path = (root / row["processed_image_path"]).resolve()
+        source_image_path = (root / row["image_path"]).resolve()
+        mask_path = (root / row["mask_path"]).resolve()
+        if any(not path.is_relative_to(root) for path in (image_path, source_image_path, mask_path)):
+            raise ValueError("KSO manifest contains a path outside its data root")
+        processed_bytes = image_path.read_bytes()
+        source_image_bytes = source_image_path.read_bytes()
+        mask_bytes = mask_path.read_bytes()
+        if hashlib.sha256(processed_bytes).hexdigest() != row["processed_image_sha256"]:
+            raise ValueError(f"KSO processed image checksum mismatch: {file_name}")
+        if hashlib.sha256(source_image_bytes).hexdigest() != row["source_image_sha256"]:
+            raise ValueError(f"KSO source image checksum mismatch: {file_name}")
+        if hashlib.sha256(mask_bytes).hexdigest() != row["source_mask_sha256"]:
+            raise ValueError(f"KSO source mask checksum mismatch: {file_name}")
+        image = cv2.imdecode(np.frombuffer(processed_bytes, np.uint8), cv2.IMREAD_GRAYSCALE)
+        if image is None or image.shape != (2048, 2048):
+            raise ValueError(f"Invalid processed KSO image: {file_name}")
+
+        raw_mask = gzip.decompress(mask_bytes)
+        if len(raw_mask) < 16:
+            raise ValueError(f"KSO mask header is truncated: {file_name}")
+        height, width, reserved_a, reserved_b = struct.unpack("<4I", raw_mask[:16])
+        if (height, width, reserved_a, reserved_b) != (2048, 2048, 0, 0):
+            raise ValueError(f"Unexpected KSO mask header for {file_name}")
+        values = np.frombuffer(raw_mask, dtype="<f4", offset=16)
+        if values.size != 2048 * 2048:
+            raise ValueError(f"Unexpected KSO mask payload size for {file_name}")
+        label_map = values.reshape(2048, 2048)
+        if not np.isfinite(label_map).all() or np.any(label_map < 0):
+            raise ValueError(f"KSO mask contains invalid labels: {file_name}")
+        rounded = np.rint(label_map)
+        if not np.allclose(label_map, rounded, rtol=0.0, atol=1e-5):
+            raise ValueError(f"KSO mask is not integer-valued: {file_name}")
+        label_ids = [int(value) for value in np.unique(rounded) if value > 0]
+        if label_ids != [int(value) for value in row["label_ids"]]:
+            raise ValueError(f"KSO label IDs differ from the manifest: {file_name}")
+
+        annotations = []
+        for label_id in label_ids:
+            instance = (rounded == label_id).astype(np.uint8)
+            contours, _ = cv2.findContours(
+                instance, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
+            )
+            polygons = []
+            for contour in contours:
+                if cv2.contourArea(contour) < 6.0:
+                    continue
+                polygon = cv2.approxPolyDP(contour, 1.0, True).reshape(-1, 2)
+                if len(polygon) >= 3:
+                    polygons.append(polygon.astype(float).reshape(-1).tolist())
+            if polygons:
+                annotations.append({"segmentation": polygons})
+        if len(annotations) != len(label_ids):
+            raise ValueError(f"Some KSO filament IDs produced no trainable polygon: {file_name}")
+        if not annotations:
+            raise ValueError(f"KSO image has no filament annotations: {file_name}")
+
+        view_id = f"kso-{date}-{stamp[-6:]}"
+        view = ImageView(
+            image_id=view_id,
+            file_name=file_name,
+            width=2048,
+            height=2048,
+            year=2023,
+            site="KSO",
+        )
+        views.append(view)
+        annotations_by_id[view_id] = tuple(annotations)
+        views_by_name[file_name] = (view,)
+        included_rows.append(
+            {
+                "date": date,
+                "file_name": file_name,
+                "source_image_sha256": row["source_image_sha256"],
+                "source_mask_sha256": row["source_mask_sha256"],
+                "label_count": len(label_ids),
+                "foreground_pixels": int(np.count_nonzero(rounded)),
+            }
+        )
+
+    included_digest = hashlib.sha256(
+        json.dumps(included_rows, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+    metadata = {
+        "name": manifest["name"],
+        "source_image_index": KSO_IMAGE_INDEX,
+        "source_mask_root": KSO_MASK_ROOT,
+        "license": KSO_LICENSE,
+        "attribution": KSO_ATTRIBUTION,
+        "source_notification_requested": True,
+        "annotation_type": "automatically detected instance label maps; weak supervision",
+        "included_observations": len(views),
+        "included_filament_instances": sum(len(items) for items in annotations_by_id.values()),
+        "competition_train_test_dates_excluded": True,
+        "blocked_competition_dates": len(blocked_dates),
+        "competition_split_sha256": split.sha256,
+        "competition_ground_truth_used": False,
+        "public_MAGFiLO_test_annotations_used": False,
+        "inference_uses_external_images": False,
+        "selection_manifest_sha256": manifest["selection_manifest_sha256"],
+        "included_manifest_sha256": included_digest,
     }
     dataset = CompetitionDataset(
         root=root,
