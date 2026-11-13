@@ -135,7 +135,8 @@ def main() -> int:
         )
         if result.returncode != 0:
             raise RuntimeError(f"git {' '.join(git_args)} failed: {result.stderr.strip()}")
-        return result.stdout.strip()
+        # Preserve leading spaces in porcelain status rows; strip only line endings.
+        return result.stdout.rstrip("\r\n")
 
     source_commit = str(manifest.get("source_commit", ""))
     current_commit = git_output("rev-parse", "HEAD")
