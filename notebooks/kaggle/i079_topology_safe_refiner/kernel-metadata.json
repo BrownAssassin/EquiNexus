@@ -1,0 +1,23 @@
+{
+  "id": "mrinanksivakumar/equinexus-i079-topology-safe-20261114",
+  "title": "EquiNexus I079 Topology Safe Refiner 20261114",
+  "code_file": "lb-0-70-topology-safe-solar-filaments-handoff.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_tpu": false,
+  "enable_internet": false,
+  "keywords": [
+    "gpu"
+  ],
+  "dataset_sources": [],
+  "kernel_sources": [],
+  "competition_sources": [
+    "filament-segmentation-2026"
+  ],
+  "model_sources": [
+    "phuongncn/solar-filament-i079-weights/PyTorch/detector-refiner/1"
+  ],
+  "machine_shape": "NvidiaTeslaT4"
+}

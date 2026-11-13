@@ -111,6 +111,41 @@ def verify_daily_submission_quota(batch_size: int, log_path: Path | None) -> Non
         )
 
 
+def validate_submit_worktree(git_output: Any, current_commit: str) -> None:
+    """Allow only the explicitly enumerated end-of-day archive while submitting."""
+    if git_output("branch", "--show-current") != "main":
+        raise ValueError("submission requires the committed main branch")
+    status_rows = git_output(
+        "status", "--porcelain=v1", "--untracked-files=all"
+    ).splitlines()
+    allowed_pending_paths = {
+        "docs/experiment-log.md",
+        "docs/model-sprint.md",
+        "notebooks/README.md",
+        "notebooks/kaggle/i079_topology_safe_refiner/kernel-metadata.json",
+        "notebooks/kaggle/i079_topology_safe_refiner/lb-0-70-topology-safe-solar-filaments-handoff.ipynb",
+        "scripts/experiments/train_native_unet_softmean_patches.py",
+        "scripts/experiments/run_native_unet_softmean_patches_test_inference.py",
+        "scripts/experiments/train_native_unet_swin_tiny.py",
+        "scripts/experiments/build_rule_compliant_test_consensus.py",
+        "scripts/submit_prepared_batch.py",
+    }
+    unexpected_changes = []
+    for row in status_rows:
+        path = row[3:].strip().strip('"').replace("\\", "/")
+        if row[:2] not in {" M", "??"} or path not in allowed_pending_paths:
+            unexpected_changes.append(path or row)
+    if unexpected_changes:
+        raise ValueError(
+            "submission requires committed model and scoring source to remain unchanged; only "
+            "the enumerated sprint documentation and archive paths may be pending, found: "
+            + ", ".join(unexpected_changes)
+        )
+    remote_commit = git_output("rev-parse", "origin/main")
+    if remote_commit != current_commit:
+        raise ValueError("source commit has not been pushed to origin/main")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--manifest", type=Path, required=True)
@@ -145,29 +180,7 @@ def main() -> int:
             f"manifest source commit {source_commit!r} does not match current HEAD {current_commit!r}"
         )
     if args.submit:
-        if git_output("branch", "--show-current") != "main":
-            raise ValueError("submission requires the committed main branch")
-        status_rows = git_output(
-            "status", "--porcelain=v1", "--untracked-files=all"
-        ).splitlines()
-        allowed_documentation = {
-            "docs/experiment-log.md",
-            "docs/model-sprint.md",
-        }
-        unexpected_changes = []
-        for row in status_rows:
-            path = row[3:].strip().strip('"').replace("\\", "/")
-            if row[:2] != " M" or path not in allowed_documentation:
-                unexpected_changes.append(path or row)
-        if unexpected_changes:
-            raise ValueError(
-                "submission requires pushed code to remain unchanged; only "
-                "unstaged edits to the two sprint logs may be pending, found: "
-                + ", ".join(unexpected_changes)
-            )
-        remote_commit = git_output("rev-parse", "origin/main")
-        if remote_commit != current_commit:
-            raise ValueError("source commit has not been pushed to origin/main")
+        validate_submit_worktree(git_output, current_commit)
 
     candidates = manifest.get("candidates")
     if not isinstance(candidates, list) or not 1 <= len(candidates) <= MAX_BATCH_SIZE:

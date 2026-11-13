@@ -1880,3 +1880,734 @@ All five submissions completed. Their public scores are 0.32, 0.32, 0.31, 0.31, 
 ## 2026-11-13 01:24 UTC I079 supplied-test inference
 
 - Ran the Apache-2.0 I079 detector/refiner on all supplied test H-alpha images with four-view flip TTA. The full RLE validator passed 1299 rows across 180 test images with no overlaps; CSV SHA-256 is 2c07cf2f06ee85b721ccb11631d6876f693ac6516277ed2d1dcd179ee7eb0794. The output MD5 differs from the upstream notebook's expected hash. This remains test-only: the model card states competition-mask-only training but does not document fold membership, so no frozen-holdout PQ is claimed.
+
+## 2026-11-13 01:52 UTC Kaggle source audit and Swin-T grouped OOF
+
+- Refreshed the full public leaderboard archive at artifacts/kaggle/leaderboard/20261113T013149Z-utc/ (CSV SHA-256 4b88fd0761906cd6d19b5ca64c3b9b6cc6b7f53631caac445cceaab7b3b292e5). It contains 1,505 teams; EquiNexus is rank 326 at 0.39 with 30 submissions. IONode Online leads at 0.70, followed by Tempest at 0.64. The five Nov 12 submissions remain complete at 0.39.
+- Archived metadata and source for three newly active public notebooks. The [Nov 12 Swin-T notebook](https://www.kaggle.com/code/juandavidvanegas/cs2-swin-unet-finetune-fixed) groups records into 14-day bins, chooses thresholds with per-image Dice, and reports a connected-component PQ proxy over annotator-union masks; it does not implement our official scorer or frozen observation split. The [PRVSiyan notebook](https://www.kaggle.com/code/prvsiyan/a-thousand-quiet-threads) is an explicitly unscored from-scratch experiment with a separate seed-20261108 split and a 192-image reserved cohort. The new [Solar Filament Demo v2](https://www.kaggle.com/code/manurupanm/solar-filament-demo-v2) states its weights were trained on public MAGFiLO v1.0, uses CC BY-NC 4.0 weights, and does not document image-level separation from competition test labels; no code or weights were adopted.
+- Audited the [daydreamerthinks SOTA model package](https://www.kaggle.com/datasets/daydreamerthinks/solar-filament-sota-models). The Kaggle dataset is CC0 but has no training-data description. Static checkpoint inspection identifies an Ultralytics YOLO11s model under AGPL-3.0, while its bundled meta_learner.pkl contains unrelated knee-label feature names. The checkpoint training split cannot be verified, so these weights remain reference-only. The Apache-2.0 [I079 fold-0 detector package](https://www.kaggle.com/datasets/lolarriven/solar-filament-i079-fold0-detector) likewise has no fold-membership details and is unused.
+- Started an independent Swin-T encoder U-Net OOF run using the MIT [timm ImageNet-1K weights](https://huggingface.co/timm/swin_tiny_patch4_window7_224.ms_in1k) (revision 4cc3a7275b50b53a7bec45f32c236ebe64227cff, SHA-256 fb01861f793143135fa0d6cd97b1631e4b33eaa3ee162bbea9e62de1c76ebac1). The exact launch script is snapshotted under artifacts/model-experiments/native-unet-swin-tiny-oof-20261113/source/; run metadata records the RTX 5070, dependencies, source hash, and unchanged split digest.
+- The Swin experiment trains 24 epochs across five grouped folds with one foreground-biased 512-pixel patch per observation and eight-view, 512-pixel tiled inference at stride 384. Its cache includes only 565 frozen training observations and 922 annotator views; the 142-observation holdout is not read. The 512-pixel CUDA forward/backward and tiled inference smoke check passed at 0.72 GiB peak allocation. Fold 0 is at epoch 9/24; training loss is not selection evidence.
+- Candidate holdout evaluation, OOF threshold selection, and submission remain gated on the complete official grouped OOF scorer. No notebook score from the audited sources is treated as comparable evidence.
+
+## 2026-11-13 02:05 UTC Swin-T progress and Kaggle preflight
+
+- The live Swin-T OOF process remains active on the RTX 5070. Fold 0 completed its epoch-16 prediction pass over all 113 held-out observations; the epoch-20 pass has started. The model is still training/evaluating against grouped folds only; no holdout score is available.
+- Re-ran the five-candidate submission dry-run. All five CSVs passed validation against source commit `9345dce3f010547bf0d0b37dd867c048f8a3be51` and frozen split digest `30cb2ec52437daf97e769a3a61bf83350062e6cf4f5d00af1f8399649065e48e`. Candidate OOF PQs range from `0.441988` to `0.452149`; the public ten-model U-Net uses a per-group crossfit protocol and is explicitly not an independent holdout.
+- Kaggle reports 0 of 5 submissions used today, 30 lifetime submissions, and GPU quota refresh at `2026-11-14T00:00:00Z`. The Friday 19:05 Toronto GPU task will read quota before launch; the current remaining GPU hours are zero until that refresh.
+
+## 2026-11-13 02:10 UTC leaderboard refresh and RF-DETR reference audit
+
+- Saved a new full leaderboard archive at `artifacts/kaggle/leaderboard/20261113T020910Z/`; ZIP SHA-256 is `590c3ca0d5910bcb00246ad05382f6915f74d51572c11fd1576d36ee7be44c65`. It contains 1,505 teams. EquiNexus remains rank 326 at 0.39 with 30 submissions; IONode Online is first at 0.70, Tempest second at 0.64, and Sayandeep Dutta third at 0.62.
+- Inspected the public [RF-DETR segmentation notebook](https://www.kaggle.com/code/jirkaborovec/filamentsegm-eda-rf-detr-seg-ptl), listed at 0.58 on the [competition code page](https://www.kaggle.com/competitions/filament-segmentation-2026/code?competitionId=143678&excludeNonAccessedDatasources=true&sortBy=scoreDescending). Its split groups physical JPEGs with a 15% `GroupShuffleSplit`; training keeps the most-annotated record per observation while validation retains all views. It calibrates confidence with a one-to-one matched-Dice proxy and adds an intensity or crop-U-Net refiner, so its validation is not directly comparable to our frozen official-PQ evaluation. The notebook's prose calls the model Nano while its executable configuration selects RF-DETR-Seg Small at 768px; no checkpoint from that run was adopted.
+- Queried public kernels for current leaderboard leaders IONode Online (`ionodeonline`) and Sayandeep Dutta (`duttasam`); neither account exposes a solar-filament competition notebook, so no new top-team source or weights were available to audit.
+- Upstream documents RF-DETR package code and Seg Nano/Small/Medium/Large as Apache-2.0. Our prior local fixed-holdout screen already tested RF-DETR-Seg Small at 384px for six epochs with mask downsample ratios 2 and 4; the best official PQ was `0.141106` versus incumbent `0.434930`, with 3.93 GB peak allocation. This public notebook remains architecture context only; we are not repeating the low-resolution run. [Upstream license and model table](https://github.com/roboflow/RF-DETR).
+
+## 2026-11-13 02:19 UTC Swin-T OOF progress
+
+- Fold 0 has completed its 16-, 20-, and 24-epoch prediction snapshots over all 113 held-out training observations. Fold 1 is training and has reached epoch 9/24. The run has not read the frozen 142-observation holdout and has no selected OOF threshold or holdout result yet.
+
+## 2026-11-13 02:21 UTC Swin-T OOF progress
+
+- The live process remains healthy and fold 1 has reached epoch 14/24. Fold 0 is the only completed OOF fold so far; the five-fold scorer sweep and frozen-holdout gate remain pending.
+
+## 2026-11-13 02:25 UTC Swin-T OOF progress
+
+- The process advanced through fold 1 epoch 18 and is training epoch 19/24. Kaggle/local submission tasks remain scheduled with wake-on-availability; the training helper is still holding the system awake while AC is connected.
+
+## 2026-11-13 02:34 UTC Swin-T OOF progress
+
+- Fold 1 finished all 24 epochs and completed its epoch-16 predictions for all 113 validation observations; epoch-20 predictions are underway. No holdout scoring has occurred.
+- Independently checked the generated OOF manifest against the frozen split: all 565 training observations appear exactly once (113 in each of five folds), with zero overlap against the 142 holdout observations. Frozen split SHA-256 remains `30cb2ec52437daf97e769a3a61bf83350062e6cf4f5d00af1f8399649065e48e`; OOF fold-map SHA-256 is `18f4f3ed4ba96a7f6f218b662bfe028c358e2a6ff2ed2025fa7fc586743d7c99`.
+
+## 2026-11-13 02:38 UTC fold and submission preflight
+
+- Fold 1 has reached epoch-24 prediction 50/113; fold 0 remains the only completed fold. Re-ran the five-candidate batch dry-run: all files and hashes pass with source `9345dce3f010547bf0d0b37dd867c048f8a3be51` and the frozen split digest. The scheduled upload remains set for 23:58 Toronto.
+
+## 2026-11-13 02:41 UTC Swin-T OOF progress
+
+- Fold 1 completed all three prediction snapshots for 113 observations and wrote its fold-completion manifest. Fold 2 training has started; folds 3 and 4 and the official OOF sweep remain pending.
+- Kaggle's live limits endpoint still reports 0/5 submissions used today (30 lifetime submissions). GPU time is exhausted until the published refresh at `2026-11-14T00:00:00Z`, five minutes before the scheduled Friday 19:05 Toronto T4 run.
+
+## 2026-11-13 02:49 UTC prepared-submission visual review
+
+- Rendered test-only overlays for the three supplied H-alpha images with the largest per-image instance-count spread across the five prepared candidates: `20140420195854Bh`, `20131027223034Lh`, and `20220714185352Th`. The public ten-model U-Net predicted more instances and short fragments (up to 17 vs. 11 on the first image); no test labels were used, so the batch remains unchanged and selection continues to rely on training-partition OOF evidence.
+- Overlay PNG and exact-area review JSON are saved at `artifacts/submissions/filament-20261113-component-selector-rf-oof-batch/qualitative-review/`; JSON SHA-256 is `c1fbcafeadfa87af923477cf152371a83a9833b280932cb9592207aa55b8fd01`.
+
+## 2026-11-13 02:51 UTC Swin-T OOF progress
+
+- Fold 2 reached epoch 18/24. Two folds are complete; three folds and the official OOF postprocessing sweep remain pending. No holdout scoring has occurred.
+
+## 2026-11-13 02:54 UTC training and submission check
+
+- Swin-T fold 2 reached epoch 21/24. Training loss decreased from 0.2937 at epoch 18 to 0.2644 at epoch 20; this is training evidence only. The 24-epoch run saves predictions at epochs 16, 20, and 24 so longer training can be judged by grouped OOF metrics rather than training loss alone.
+- Kaggle CLI authentication works from the repository virtual environment. The latest five submissions completed with public PQ 0.39 each. The next five-candidate batch passes dry-run validation and is scheduled for 2026-11-13 04:58 UTC (2026-11-12 23:58 Toronto). No new submission has been sent yet.
+
+## 2026-11-13 02:56 UTC Swin-T OOF progress
+
+- Fold 2 completed its 24 training epochs and started OOF inference; the epoch-16 snapshot reached 10/113 fold observations at the last check. Training loss was 0.2703 at epoch 24 versus 0.2644 at epoch 20, so it is not a reliable basis for extending training. Wait for grouped OOF scores at epochs 16, 20, and 24 before deciding whether to train longer. The independent 142-observation holdout remains untouched.
+
+## 2026-11-13 03:07 UTC leaderboard and public-kernel audit
+
+- Downloaded a fresh public leaderboard archive to `artifacts/kaggle/leaderboard/20261113T030708Z/filament-segmentation-2026.zip` (SHA-256 `1c07e585b25feb30d7bdc167af5dae5faa3d321e4f76ad0d745d16baac3fa590`). It contains 1,505 teams; EquiNexus is rank 326 at 0.39 with 30 submissions. Current top scores are IONode Online 0.70, Tempest 0.64, and Sayandeep Dutta 0.62; new Nov 12–13 entries appear at 0.56–0.58.
+- Queried public competition kernels for six current leaderboard accounts; Kaggle returned no public competition notebooks for those accounts. Downloaded three public references under ignored `artifacts/kaggle/kernels/` for source review. SHA-256s: Phuong's 0.70 I079 handoff `b59aea47798e2ccba6af14f0e3bd7505dddec20ceb7d4c37704521bbde02e49c`; ASTH-Net `8930cd90379251c2095061f459bc7208198345e6fa53bb25036f75eae9381b9e`; and the user-linked `prvsiyan/notebook24a4dce69e` vote notebook `0ab2dc04f0e20d3687cd52405874977003b853609371fd03f7a32abde02e8a90`.
+- Phuong's handoff consumes the public I079 detector/refiner weights and competition test images only. Its model card says training used only competition training images and annotations, with no public MAGFiLO/test-overlap labels. The notebook's `0.70` refers to a pre-August metric; the current leaderboard snapshot places team Fususu (`phuongncn`) at 0.36, rank 722. The local I079 test candidate follows the same family and thresholds but has a different CSV MD5 (`e115badd59b863f77a10d9be49ca21ed` vs. the T4 notebook's `09c0eae5fdff29a91f8a740475ecaf36`). Across all 1,299 matching IDs the local and Kaggle-T4 masks have mean RLE IoU 0.99875 (minimum 0.61847); its frozen-holdout score remains unknown, so keep it test-only and do not treat the old 0.70 title as current evidence.
+- ASTH-Net uses competition training annotations and supplied test images, but its code sorts records by filename, trains on the first 160 records, and validates on 20 records after the 88% index. That is not the frozen observation-grouped split; the pulled notebook has no cached metric outputs despite comments claiming OOF tuning. Its high/low hysteresis and tangent-guided fragment bridging are ideas to screen on proper grouped OOF probabilities, not validation evidence to adopt. Its pulled metadata has no license field, so no code was copied.
+- The current leaderboard places team `prvsiyan` at 0.40, rank 164. Its notebook is inference-only, but its vote includes the Tushhaaarrrr 0.37/0.40 U-Net outputs; the upstream training code uses MAGFiLO spine metadata, which the host prohibits as training ground truth. The vote therefore is not a compliant reference candidate, and its 0.40 should not guide our selection. The notebook has no grouped validation result.
+
+## 2026-11-13 03:28 UTC Swin-T progress and submission preflight
+
+- Verified the live five-fold Swin-T OOF process is using the RTX 5070 with AC power connected. Folds 0-2 have completion manifests; fold 3 finished training epoch 24 and its epoch-16 OOF inference, and the epoch-20 pass reached 50/113 observations. Fold 4 and the aggregate OOF scorer sweep remain pending. The 142-observation frozen holdout has not been evaluated.
+- Revalidated both scheduled five-candidate batches in dry-run mode. All ten candidate files and hashes pass; the manifests retain pushed source `9345dce3f010547bf0d0b37dd867c048f8a3be51` and split digest `30cb2ec52437daf97e769a3a61bf83350062e6cf4f5d00af1f8399649065e48e`. The first batch is scheduled for Nov 12 23:58 Toronto; the Friday batch is scheduled for Nov 13 19:20 Toronto, after the Kaggle UTC quota refresh.
+- Kaggle still shows the prior five submissions complete at public PQ 0.39 and no newer batch submitted. The keep-awake monitor remains active for the GPU run; the daily Conventional Commit and push task remains scheduled for Friday 19:50 Toronto.
+
+## 2026-11-13 03:37 UTC Swin-T OOF fold progress
+
+- Fold 3 completed all 16-, 20-, and 24-epoch predictions for its 113 validation observations and wrote its completion manifest. Fold 4, the fifth and final grouped fold, has started training and reached epoch 4/24. The aggregate OOF postprocessing sweep and independent holdout evaluation have not started; training loss remains diagnostic only.
+
+## 2026-11-13 04:02 UTC Swin-T grouped OOF predictions complete
+
+- All five folds now have completion manifests and epoch-16, epoch-20, and epoch-24 predictions for the 565 frozen training observations; each observation appears in one 113-observation validation fold. The fold-map SHA-256 is `18f4f3ed4ba96a7f6f218b662bfe028c358e2a6ff2ed2025fa7fc586743d7c99`, and the frozen split remains unchanged.
+- Rechecked `oof-folds.csv` against `observation_oof_seed42_5fold.csv`: 565/565 training names covered, 0 fold-map mismatches, 0 holdout overlaps, and 113 observations in each fold.
+- The runner is entering its 324-setting official grouped-scorer sweep. Its process is live and the GPU has been released; no OOF score summary or independent holdout score exists yet.
+
+## 2026-11-13 04:16 UTC Friday batch manifest correction
+
+- The current Nov 14 Toronto submission manifest contains four grouped-OOF public U-Net/YOLO11s fusion variants (PQ 0.443089, 0.441954, 0.427073, 0.431139) plus a test-only HDJoJo YOLO26x-seg candidate. All five passed the latest dry-run with source commit `9345dce3f010547bf0d0b37dd867c048f8a3be51` and the frozen split digest. No batch has been submitted yet.
+- YOLO26x test inference passed full RLE validation for 1,436 instances over all 180 supplied test images. Its public model card reports training on the 707 competition training images, but exact fold membership is unknown; no holdout metric is claimed. The HDJoJo team score of 0.55 (rank 25 in the archived leaderboard) is context for selecting this test-only candidate, not a score for our CSV.
+- Older Nov 11/12 notes describe CAGE r5 in this slot. The current manifest replaced it with YOLO26x. CAGE remains a license-eligible CC BY-NC 4.0 reference under the user's policy clarification, but its model card reports a biased 0.405 PQ split with duplicated annotator observations across train and validation, so that number is not independent validation evidence. Its test-only CSV is not in the current batch.
+- The Swin-T OOF scorer sweep has advanced to 20/324 settings, with partial best PQ 0.294108 at epoch 16. This is not a final selection score; the sweep and independent holdout evaluation remain incomplete.
+
+## 2026-11-13 04:20 UTC Kaggle API authentication check
+
+- Kaggle API calls for submissions, quota, competition kernels, and competition listings all returned `Authentication required`. The local five-candidate manifests still pass dry-run validation, but the 23:58 Toronto upload task cannot be assumed to succeed until Kaggle authentication is restored. No submission upload was attempted after the authentication failure.
+
+## 2026-11-13 04:24 UTC Swin-T scorer sweep progress
+
+- The live CPU-side grouped scorer sweep reached 40/324 settings. Its current partial best is PQ `0.313127` at epoch 16, below the incumbent grouped OOF PQ `0.452149`; no selection decision is made until the sweep completes. The independent holdout remains unevaluated.
+
+## 2026-11-13 04:41 UTC public notebook score audit
+
+- The competition Code listing indexes "Solar Segmentation U-Net++ / EfficientNet-B4" at 0.67, while its linked `ruhul20/solar-segmentation-u-net-efficientnet-b3` notebook page reports public score 0.27 and best score 0.29 (version 2). The notebook lists a 7h 18m 48s T4x2 runtime and Apache-2.0 license. These values do not reconcile, so the listing score is not comparable evidence for model selection. No code or weights were adopted. [Competition Code listing](https://www.kaggle.com/competitions/filament-segmentation-2026/code?competitionId=143678&excludeNonAccessedDatasources=true&sortBy=scoreDescending) and [notebook page](https://www.kaggle.com/code/ruhul20/solar-segmentation-u-net-efficientnet-b3)
+
+## 2026-11-13 04:47 UTC public leaderboard integrity audit
+
+- A competition discussion reports that the same model and postprocessing scored 0.93 with zero predictions, compared with 0.72 at 1.9 predictions per image and 0.67 at 6.4. The host later replied that the Evaluation, Self Evaluation, and Leaderboard Ranking guidance had been updated. This explains why indexed public scores, including the 0.93 notebook listing, are not reliable evidence of segmentation quality. We continue selecting with the fixed PQ scorer and use public scores only as secondary context. [Discussion and host reply](https://www.kaggle.com/competitions/filament-segmentation-2026/discussion/729809) and [updated leaderboard metric](https://www.kaggle.com/competitions/filament-segmentation-2026/overview/leaderboard-ranking)
+
+## 2026-11-13 05:08 UTC submission batch and uploader fix
+
+- The 04:58 UTC scheduled task validated all five CSVs but stopped before any upload: `submit_prepared_batch.py` stripped the leading porcelain-status column and misread the first allowed sprint-log path. Fixed this in pushed commit `48f6487` by preserving leading whitespace and trimming only line endings. Updated both ignored manifests to source commit `48f6487f3caa97f4df95db417131e87d929201aa`; dry-run validation passed for both five-candidate batches with the frozen split digest unchanged.
+- Retried the Nov 13 batch at 05:06-05:07 UTC. Kaggle accepted all five submissions: `58296190` (OOF PQ 0.452149), `58296201` (0.450632), `58296209` (0.448411), `58296219` (per-observation crossfit PQ 0.447799; not an independent holdout), and `58296226` (0.441988). The immediate status refresh showed all five as pending. The previous five completed submissions remain at public PQ 0.39 each.
+- Swin-T grouped OOF postprocessing reached 120/324 settings with partial best PQ `0.349162` at epoch 16. This remains below the incumbent 0.452149 OOF candidate; the sweep and independent holdout gate are still incomplete.
+
+## 2026-11-13 05:14 UTC submission scores and leaderboard snapshot
+
+- Kaggle marked all five new submissions complete: `58296190` scored 0.39, `58296201` 0.38, `58296209` 0.38, `58296219` 0.39, and `58296226` 0.38. The detailed status refresh is archived in `artifacts/submissions/filament-20261113-component-selector-submissions.jsonl`.
+- Downloaded the full 1,507-team [public leaderboard](https://www.kaggle.com/competitions/filament-segmentation-2026/leaderboard) to `artifacts/kaggle/leaderboard/20261113T051300Z/`. The EquiNexus row is rank 327 at 0.39 with 35 submissions. The top three are IONode Online at 0.70, Tempest at 0.64, and Sayandeep Dutta at 0.62. ZIP SHA-256: `942743b3858ae5599ec5b3ff3b7e6ab03683f6e2bad937260fa0f30346bf2309`; CSV SHA-256: `ddb1dac25e1307b943c5e9544a95f76ff63e6f7b22cdc7be2d142b9dec14fac1`.
+- These public scores are secondary to grouped validation: three candidates scored 0.38, two matched the team's existing 0.39, and none improved the prior public best. The public leaderboard's empty-prediction issue remains documented above.
+
+## 2026-11-13 05:20 UTC Kaggle status refresh
+
+- The scheduled Kaggle refresh confirms all five Nov 13 submissions remain complete at scores 0.39, 0.38, 0.38, 0.39, and 0.38. The 1,507-team leaderboard is unchanged: EquiNexus rank 327 at 0.39 with 35 submissions. The refreshed archive is in `artifacts/kaggle/leaderboard/20261113052000-utc/` (ZIP SHA-256 `d76d011d79435196b97b0779d74d3a95a9db10ee9ca9437b6cdfad171e9c4ae9`; CSV SHA-256 `ee4342b027bf72b12737ba62401c0feaecdddb47a1e33dd1dedd5ca2cf9bb204`).
+
+## 2026-11-13 05:22 UTC Swin-T OOF sweep progress
+
+- The live grouped scorer sweep reached 150/324 settings and improved its partial best to PQ `0.352145` at epoch 20. This remains below the incumbent `0.452149`; the epoch-24 settings, full sweep, and independent holdout gate are pending.
+
+## 2026-11-13 05:28 UTC Swin-T OOF sweep progress
+
+- The live grouped scorer sweep reached 160/324 settings and improved its partial best to PQ `0.357087` at epoch 20. It remains below the incumbent `0.452149`; the remaining settings and independent holdout gate are pending.
+
+## 2026-11-13 05:32 UTC public 0.55 notebook source audit
+
+- Pulled version 35 of the Apache-2.0 `Solar Filament Unet Segmentation | 0.55+` notebook into ignored `artifacts/kaggle/kernels/lamhuy8904-solar-filament-unet-segmentation-v35-20261113/` (SHA-256 `906841cbc0e1f50b89bda6648b1c7f85eff16975e62c3679a120141aa172a687`). Its Kaggle metadata lists no dataset or model sources and reports a 0.55 public score. [Notebook page](https://www.kaggle.com/code/lamhuy8904/solar-filament-unet-segmentation-0-55)
+- Static source inspection found a literal compressed `CHAMPION_PAYLOAD`, decompressed into a dataframe, and the test submission loop copies its `segmentation_rle` entries by test-image stem. The loop's output does not come from the trained U-Net. A notebook comment alleges the payload contains ground-truth labels. We did not decode or use the payload; the notebook and score are excluded from model selection. [Comment reporting the leak](https://www.kaggle.com/code/lamhuy8904/solar-filament-unet-segmentation-0-55/comments)
+
+## 2026-11-13 05:34 UTC Swin-T OOF sweep progress
+
+- The live sweep reached 170/324 settings and improved its partial best to PQ `0.362439` at epoch 20. It remains below the incumbent `0.452149`; epoch-24 settings, the final OOF summary, and the holdout gate remain pending.
+
+## 2026-11-13 05:38 UTC Swin-T OOF sweep progress
+
+- The live sweep reached 180/324 settings and improved its partial best to PQ `0.366852` at epoch 20. It remains below the incumbent `0.452149`; the remaining epoch-20 and epoch-24 configurations are pending.
+
+## 2026-11-13 05:47 UTC evaluation-aligned public model audit
+
+- Pulled the public Kaggle notebook [MAGFiLO V1 — Evaluation-Aligned Solar Filament Segmentation](https://www.kaggle.com/code/muhammadshoaibaltaf/magfilo-v1-evaluation-aligned-solar-filament-s) into ignored `artifacts/kaggle/kernels/magfilo-v1-eval-aligned-shoaib-20261113/` (source SHA-256 `EE91EBBACF63BABD0B828CA9D285290BDE6260AD22945B4F33EE1D3931B28D3F`). Its public metadata has no attached dataset names, kernels, or model sources, while the notebook requires separate V10 YOLO and V12 crop-model checkpoints; Kaggle dataset discovery returned no matching public datasets and the checkpoint metadata endpoints returned 403. The kernel output has no downloadable files, so its claimed pipeline cannot be reproduced from the accessible inputs.
+- The notebook's validation does keep annotator views grouped by filename and implements the strict `IoU > 0.5` all-pairs PQ accounting. However, it uses an insertion-order `train_test_split` with a 15% holdout, then a 40-photo calibration subset; this is not our frozen sorted, year-stratified 20% split. It also compares a baseline checkpoint of unknown fold provenance, so its metric is not independent validation evidence.
+- A potentially useful idea is consensus box supervision: link cross-annotator masks at IoU `>= 0.40`, forbid merges between same-view instances, then train a detector from the fused boxes and refine detector crops with a U-Net. Checkpoint provenance and license remain unavailable, so we have not used the weights or copied code; only the idea is queued for a future grouped-OOF experiment. The notebook installs Ultralytics, whose AGPL release obligation is already accepted if that family wins.
+
+## 2026-11-13 05:48 UTC Swin-T OOF sweep progress
+
+- The grouped sweep reached 190/324 settings and its partial best rose to PQ `0.368644` at epoch 20. It remains below the incumbent `0.452149`; no holdout scoring or candidate promotion is warranted while the complete OOF sweep is pending.
+
+## 2026-11-13 06:14 UTC public learned-filter candidate audit
+
+- Retrieved the latest public [Dariush Afshar U-Net notebook](https://www.kaggle.com/code/dariushafshar/solar-filament-u-net-oof-0-45-vs-public-0-39) and its Kaggle output under ignored `artifacts/kaggle/kernels/`. Notebook SHA-256: `48a1a2f5266fe794886d3a875cee87dbab656c78405c52d863f264e9ccc9c94a`. The ten-model weights are licensed CC BY-NC-SA 4.0; the user has authorized non-commercial research use, and attribution/ShareAlike are recorded in candidate metadata.
+- The notebook trains a `HistGradientBoostingRegressor` on the published OOF candidate table and selects components using 16 features. The dataset receipt reports nested grouped OOF PQ `0.455236` and public PQ `0.39` for the learned-rule model. The exact downloaded CSV has SHA-256 `f264ce76fff59ac146b10dbbe196c54d4eda80fbb2a34246540d137a6499ca55`; it differs from the receipt's previously submitted CSV and the source log confirms the mismatch, so this exact file remains unscored. It is included as an attributed test-only candidate, with no EquiNexus frozen-split metric claimed.
+- Archived the output at `artifacts/submissions/dariushafshar-unet-learned-filter-20261114/`. The repository RLE validator passed all 1,148 masks: 2048×2048 round trips exact, no empty masks, no overlaps, IDs belong to the supplied test set, and 180 test images were processed (177 have predictions). It replaces the lowest local OOF fusion candidate (`0.427073`) in the scheduled five-file batch; the four other candidates and frozen split are unchanged. Batch dry-run passed with five unique files and the frozen split digest.
+
+## 2026-11-13 06:40 UTC leaderboard and public-source audit
+
+- Kaggle API snapshot at 06:24 UTC: EquiNexus is rank 327/1,507 with public score 0.39 and 35 submissions. The five Nov 13 submissions completed at 0.38-0.39 (refs 58296190, 58296201, 58296209, 58296219, 58296226). The leaders are at 0.70, 0.64, and 0.62. The leaderboard ZIP is archived at artifacts/kaggle/leaderboard/20261113T062458Z/ (SHA-256 C18264113FAA5927D0762E8114CCD124611838EC744920AD1EDA54E01FCEAD64).
+- Audited [prvsiyan's five-family consensus notebook](https://www.kaggle.com/code/prvsiyan/notebook24a4dce69e). It performs inference only and votes across five model families at IoU > 0.5, with a stricter 0.6 requirement when exactly three families support a mask. Its public output SHA-256 is 6d7c830c29c31a2ad066c9bebb1684bc511dcc1c53bb7a168b5c0fbe1a91f33b; RLE validation passed 1,199 masks over all 180 supplied test images. Its attached sources include Tushhaaarrrr notebooks; the accessible 0.37 source trains an auxiliary head from the provided spine annotations, and the 0.40 training recipe is not publicly attached. Because the competition restricts other ground-truth metadata in training, this merged output is excluded from our submission batch pending clearer provenance. Notebook SHA-256: 0ab2dc04f0e20d3687cd52405874977003b853609371fd03f7a32abde02e8a90.
+- The 0.37 notebook's potentially useful image-only ideas are annotator-mean soft mask targets, multiscale local-contrast/ridge channels, and hysteresis instance extraction. We will only test a mask-only implementation; no spine labels, external test annotations, or third-party predictions enter training or validation. See the [competition evaluation rules](https://www.kaggle.com/competitions/filament-segmentation-2026/overview/evaluation) and the [host's test-label clarification](https://www.kaggle.com/competitions/filament-segmentation-2026/discussion/729396).
+- The local Swin-T five-fold training is complete; its scorer is at 290/324 OOF postprocessing settings, best partial PQ 0.377095 at epoch 20. This is below the 0.452149 incumbent, so the holdout gate remains closed.
+
+## 2026-11-13 06:58 UTC completed Swin-T grouped OOF
+
+- The five-fold OOF sweep completed over the 565-observation training partition (922 annotator views); the fixed 142-observation holdout was not used. On the frozen split digest `30cb2ec52437daf97e769a3a61bf83350062e6cf4f5d00af1f8399649065e48e`, the best setting was epoch 24, probability threshold 0.70, minimum component area 400, and 9-pixel closing, for PQ `0.379023` (TP 4,136; FP 3,790; FN 2,352; GT 6,488). Total run time was 18,625.316 seconds. Source commit `48f6487f3caa97f4df95db417131e87d929201aa`; script SHA-256 `770245046d08524930809773d4be854e8c463884bedb57063e30e07585715edb`.
+- This is 0.073126 below the incumbent grouped OOF PQ `0.452149`; no holdout evaluation, final test fit, or submission candidate was produced. The Swin-T model is rejected for promotion.
+
+## 2026-11-13 06:58 UTC mask-only soft annotator-mean run
+
+- The local RTX 5070 is training a scratch EfficientViT-B2 U-Net on per-pixel means of competition-provided segmentation-mask unions, grouped by observation. It uses 565 training observations and 922 annotator views; no spine metadata, external labels, or test observations enter training. The frozen split digest remains `30cb2ec52437daf97e769a3a61bf83350062e6cf4f5d00af1f8399649065e48e`.
+- Cache creation completed with zero crop-dropped foreground pixels. Epoch 1 completed at training loss `0.769184` in 578.044 seconds; epoch 2 reached step 300/452 by 06:58 UTC. This remains an incomplete training run with no OOF metric or promotion claim.
+
+## 2026-11-13 07:06 UTC I079 source and output reconciliation
+
+- Rechecked the public [topology-safe I079 handoff](https://www.kaggle.com/code/phuongncn/lb-0-70-topology-safe-solar-filaments-handoff) and its [Kaggle Model card](https://www.kaggle.com/models/phuongncn/solar-filament-i079-weights). The model variation metadata identifies Apache-2.0 weights; its usage field says training used only the competition training images and annotations. Training-fold membership is undocumented, so this model remains ineligible for our frozen-holdout validation.
+- The local MD5-locked inference produced 1,299 nonempty, non-overlapping RLE masks across 180 test images, but its CSV MD5 `e115badd59b863f77a10d9be49ca21ed` differs from the handoff's expected `09c0eae5fdff29a91f8a740475ecaf36`. The prior EquiNexus I079 submission scored 0.34; current Kaggle records disagree, with the competition code index showing 0.70 while a notebook page for version 1 shows 0.34. The historical 0.70 is therefore not tied to our local output. This variant is not added to the next batch and will not be resubmitted without fixed-split validation or an exact scored artifact.
+
+## 2026-11-13 07:14 UTC Huendao public-output audit
+
+- Pulled `huendao/solar-filament-segmentation-challenge-2026` source and its latest public output. Kernel metadata attaches the competition test images and only the public `dariushafshar/solar-filament-unet-weights` dataset. Its inference uses ten U-Net checkpoints, eight D4 transforms, and a high-confidence hysteresis/component keep rule; no training annotations or external test labels are read at inference. Notebook SHA-256: `bbac8f2e65ccb0a11a24f73d04d3cd4b6579ad5c3bbc92fd5b771951741204e2`.
+- Its code comments attribute OOF PQ `0.4523` and public score `0.3945` to the upstream recipe; those are not EquiNexus frozen-split results. The downloaded test CSV has SHA-256 `0afff2c17292c1fef14144757a9fbfe40dcb3c3c8f9011f60f225c17db316dc3`; the repository validator passed 1,222 exact 2048x2048 RLE round trips across all 180 test images (177 with rows, three without predictions, no overlaps). Kaggle logs report 21 minutes on two T4s. We did not add this near-duplicate Dariush-model output to the five-file batch because it has no local frozen-split score and the batch already carries a Dariush learned-filter variant.
+
+## 2026-11-13 07:33 UTC EfficientViT-B2 grouped OOF relaunch and evening task check
+
+- The earlier 24-epoch soft-mean run had completed three epochs in its first fold but its observed epoch time (about 578 seconds) made a full five-fold run unlikely to fit the remaining sprint window. Preserved that partial output and launched a fresh 16-epoch OOF run from the prepared cache at 07:25 UTC, writing to `artifacts/model-experiments/native-unet-softmean-oof-20261113-e16/`. It uses the same 565-observation training partition, 922 competition annotator views, mask-only per-pixel mean targets, and frozen split digest `30cb2ec52437daf97e769a3a61bf83350062e6cf4f5d00af1f8399649065e48e`. No epoch metric or OOF score is available yet; the independent holdout remains unused.
+- At 07:32 UTC the local RTX 5070 was at 100% utilization with 7,302/8,151 MiB allocated and AC connected. The 19:10 Toronto cutoff preview now identifies both Python processes for this run, so they will be stopped if still active at the authorized sprint cutoff.
+
+## 2026-11-13 07:33 UTC submission and checkpoint preflight
+
+- Revalidated the five Nov 14 candidate files against the current manifest. Local HEAD, `origin/main`, and manifest source all match `48f6487f3caa97f4df95db417131e87d929201aa`; the frozen split digest is unchanged, and all five candidates pass the uploader dry-run. The full preflight record is in `artifacts/automation/submit-batch-20261114.jsonl`.
+- Disabled the expired Nov 13 one-time submission task, which fired early on Nov 12 at 23:58 Toronto and failed before upload. The five Nov 13 candidates were submitted separately with the fixed uploader and verified in the Kaggle API. The Nov 14 batch uses its own manifest and scheduled task at Nov 13 19:20 Toronto, after the UTC-day Kaggle quota reset.
+- Corrected the ignored cutoff script to include `train_native_unet_softmean_grouped.py` and the daily-checkpoint script to read the new 16-epoch run's summary path. PowerShell syntax checks passed; tracked changes remain limited to the two sprint logs.
+## 2026-11-13 07:55 UTC patch-resolution redesign and topology ablation
+
+- Stopped the full-frame EfficientViT-B2 grouped OOF attempt after it reached only epoch 1, step 50/452, over about 20 minutes; no epoch checkpoint or validation score was produced. Its partial cache and logs remain archived. The sprint cutoff script still covers the trainer family.
+- Reworked the local runner to sample 512×512 training patches from the cached 1888×1888 training crop: 80% of patches center on a pixel with soft target value at least 32, and the rest are sampled uniformly. A local CUDA forward/backward smoke measured 0.071 and 0.069 seconds for the two warmed-up 512px steps after a 2.48-second first step, with 0.71 GiB peak allocation. Full-crop 1888px inference also fit at 0.89 GiB and took 0.13 seconds. The frozen split and training labels are unchanged; the new OOF run will record checkpoint metrics at multiple epochs.
+- Evaluated the public connected-component cleanup idea using our grouped OOF support-0.55 masks. The baseline reproduced PQ `0.4521491778`; largest-component and secondary-island thresholds of 5%, 10%, and 20% all changed zero masks and retained the same score, so it offers no improvement for this candidate. Output is under `artifacts/model-experiments/component-island-oof-20261113/support055/`.
+- Audited the public Felipe KNBIS solution repository. Its July 20 technical report describes the older `instance_wise_dice` leaderboard metric; the competition announced a PQ methodology update on Aug 7, so its historical 0.71 should not guide our current official-PQ selection. The timm model card documents the EfficientViT-B2 ImageNet weights as Apache-2.0. We used the public report only as an idea source and independently implemented the connected-component ablation. [Historical report](https://github.com/FELIPEACASTRO/solar-filament-2026/blob/master/report/TECHNICAL_REPORT.md), [official scoring update](https://www.kaggle.com/competitions/filament-segmentation-2026/overview/announcements), [timm weight license](https://huggingface.co/docs/timm/main/en/models/efficientvit-mit).
+- The ignored daily checkpoint script now reads the new patch-OOF output directory so the scheduled Conventional Commit will include its final result when available.
+## 2026-11-13 08:00 UTC patch-based EfficientViT-B2 OOF run started
+
+- Started a five-fold grouped OOF run on the local RTX 5070 at 07:58 UTC using 512×512 patches, batch size 1, gradient accumulation 4, 40 epochs per fold, 80% foreground-centered patch sampling, and eight-view inference. The run reuses the validated 565-observation cache and the frozen split digest `30cb2ec52437daf97e769a3a61bf83350062e6cf4f5d00af1f8399649065e48e`; the 142-observation holdout remains untouched.
+- The first fold completed epochs 1 and 2 in 56.031 and 45.733 seconds with training losses 0.761475 and 0.702078. These are training diagnostics only; no OOF score or promotion claim is available yet. The run metadata records the RTX 5070, CUDA/PyTorch and package versions, source commit `48f6487f3caa97f4df95db417131e87d929201aa`, and runner SHA-256 `2c89dffea15071af547106d42298360ad0adc92e2c92f486b0f12f28b560d8c6`.
+- The GPU smoke check shows 1.1 GiB allocated, leaving ample VRAM headroom. Updated and syntax-checked the ignored sprint-cutoff script so its 19:10 Toronto stop also recognizes the new patch-runner process; preview confirms it matches both parent and child Python processes.
+- At 08:05 UTC the trainer remained live in fold 0 at epoch 8/40; seven epochs had completed, with mean training loss down to `0.499816` at epoch 7. The active CUDA child process is set to AboveNormal priority; 1.1 GiB VRAM and 16.3 GiB system RAM remain free. No validation metric is available yet.
+- Encoder provenance: `timm/efficientvit_b2.r288_in1k`, Hugging Face revision `891530d0c5a400dd2d4549c81d433661b192abe1`; cached `model.safetensors` SHA-256 `f5726851b5c55fab49f8302a79c3a898814e11bc20df76cc23cab28ae15c7328`. The [model card](https://huggingface.co/timm/efficientvit_b2.r288_in1k) identifies ImageNet-1k pretraining and Apache-2.0 licensing. The active run metadata records this exact initialization artifact.
+
+## 2026-11-13 08:15 UTC public-score integrity check
+
+- Pulled the latest public [leaderboard disclosure notebook](https://www.kaggle.com/code/artkomissar/please-fix-the-leaderboard) into ignored `artifacts/kaggle/kernels/please-fix-leaderboard-20261113/`. Notebook SHA-256: `DA77D32FB7920DD6B2132328D966DC8E2609F1429FFBA77C3DCE5ACE75AEC120`. Its source explicitly builds a five-row submission of zero-area `PPP8` masks and reports Public Score 1.00 for submission `55041507`; this score claim comes from the author’s disclosure and was not independently queried from another team’s submission history. A separate Kaggle discussion reports empty-mask public scores up to 0.93, and the host says the evaluation strategy was updated to PQ. [Empty-mask bug report](https://www.kaggle.com/competitions/filament-segmentation-2026/discussion/729809), [official scoring update](https://www.kaggle.com/competitions/filament-segmentation-2026/overview/announcements).
+- The current Kaggle competition API leaderboard still lists IONode Online at 0.70, Tempest at 0.64, and Sayandeep Dutta at 0.62. Treat public ranking as secondary and disregard the empty-mask result; all EquiNexus candidate selection remains based on the frozen grouped official scorer and genuine instance predictions.
+- At 08:15 UTC the first fold reached its epoch-20 snapshot (training loss `0.220060`) and continued into epoch 21. This is still training-only evidence; the other folds, OOF predictions, official scorer sweep, and holdout gate remain pending.
+- Re-ran the five-file batch dry-run at 08:16 UTC: all candidates passed, with source commit `48f6487f3caa97f4df95db417131e87d929201aa` and the unchanged frozen split digest. The batch remains scheduled for 19:20 Toronto time, after the reported GPU quota refresh; no submissions were sent by this preflight.
+- At 08:19 UTC fold 0 completed the epoch-24 checkpoint (`0.219775` mean training loss) and continued into epoch 26. The 16/20/24 snapshots are now saved; no OOF inference or scorer result has been produced yet.
+- At 08:23 UTC fold 0 reached epoch 30/40, with mean training loss `0.206043`; the CUDA process remains healthy and the GPU has about 7 GiB free. The selected OOF snapshots remain 16/20/24/40; no validation score is available at this training stage.
+- At 08:32 UTC the first fold completed all 40 training epochs (final mean loss `0.198849`) and began eight-view full-crop OOF inference. Its epoch-16 predictions reached 100/113 observations at the last check; epochs 20/24/40 and four remaining folds are pending.
+- At 08:33 UTC fold 0 completed OOF inference for epochs 16 and 20 (all 113 held-out observations); epoch-24 inference was 30/113. GPU temperature had returned to 81°C after a brief 84°C peak, with 1.2 GiB allocated. The run is healthy and still has no aggregated OOF score.
+- Audited the first-fold artifacts against the frozen manifests: the generated five-fold map matches `observation_oof_seed42_5fold.csv` for all 565 training observations (113 per fold); fold 0 has 452/113 disjoint train/validation groups, and the 142-observation fixed holdout has zero overlap. Fold 0's completion manifest lists all four prediction snapshots.
+- At 08:49 UTC fold 1 reached its epoch-16 snapshot (training loss `0.226345`) and continued to epoch 18/40. The fold-1 epoch-16 checkpoint is saved; no OOF metrics are calculated until all five folds finish inference.
+
+## 2026-11-13 08:54 UTC patch OOF progress
+
+- Fold 0 completed all 40 training epochs and all four eight-view prediction passes for its 113 held-out training observations. Fold 1 is at epoch 22/40 (step 400/452 at the last poll). The aggregate OOF postprocessing sweep and remaining folds are pending; the fixed holdout remains untouched.
+
+
+## 2026-11-13 09:00 UTC patch OOF progress
+
+- Fold 1 completed epoch 30/40 (mean training loss `0.216763`) and had reached step 200/452 of epoch 31 at the last poll. The trainer remains live on the RTX 5070 with about 1.1 GiB allocated and temperature near 75 C. Fold 1 inference and folds 2-4 remain pending; no aggregate OOF metric is available, and the fixed holdout remains untouched.
+
+
+## 2026-11-13 09:03 UTC patch OOF progress
+
+- Fold 1 completed epoch 33/40 (mean training loss `0.216889`) and had reached step 350/452 of epoch 34 at the last poll. GPU use remains near 1.1 GiB at about 75 C. The fold-1 inference, folds 2-4, and aggregate official-PQ sweep remain pending; the frozen holdout is untouched.
+
+
+## 2026-11-13 09:10 UTC public kernel reference audit
+
+- Archived a 100-row Kaggle public-kernel listing requested with `scoreDescending` at `artifacts/kaggle/kernels/top-score-kernels-20261113T0907Z.csv` (SHA-256 `46eb2e9407c4ffa0695eea4a7b51c84bb7d86fcd2e61cba6408c9d3c8c2744f0`). Pulled four previously unaudited sources under `artifacts/kaggle/reference-audit/leaderboard-kernels-20261113/`; the attached metadata lists the competition input but no external dataset or model sources.
+- Audited [CartoonistBeard EdgeAttNet refiner](https://www.kaggle.com/code/cartoonistbeard/solar-filament-unet-refiner-edge-attn), source SHA-256 `deff5573a3d5ca8968dae79b51031896a1a8155f955d131de9ad5c8b90f29652`. Its proposal refiner is trained from scratch and its executable requires precomputed train/validation/test proposal caches. Its evaluator uses Hungarian one-to-one matching at IoU >= 0.5 and averages per-annotator PQ per observation, so its reported selection metric is not our official scorer. No caches or independent frozen-split results were available; not adopted.
+- Audited [PandaDev YOLO26 full-resolution notebook](https://www.kaggle.com/code/pandadev0069/solar-filament-yolo26-full-res-0-36), notebook SHA-256 `5ec56d2be8b27511ae8ea307d5c18be91c94f35e440b0de95a5dfc9f500d52b1`. It trains YOLO26s-seg at 2048 pixels for up to 150 epochs from `yolo26s-seg.pt`, groups duplicate annotation views by physical filename for a random 20% GroupShuffleSplit, and sweeps confidence on that project split. Its PQ evaluator uses Hungarian one-to-one matching rather than the challenge scorer's all-qualifying-pairs count. The split and metric do not provide comparable selection evidence; no weights or output were adopted.
+- Audited [Spongeboi ResNet-18 U-Net](https://www.kaggle.com/code/spongeboimebob/run3-resnet18), notebook SHA-256 `ff323722530ae666e4dc25e34c34312c21d4b32dd0a6686d1132dec2d9e3cf50`. It resizes images to 1024, uses ImageNet-initialized ResNet-18, holds out randomly selected filename months, samples one annotator record per training image, and evaluates only the first annotator view. Its custom scorer counts every IoU hit but computes FP/FN as instance counts minus pair counts, which can become negative for split/merge cases. Not adopted.
+- Audited [ASTH-Net spine-tangent hysteresis notebook](https://www.kaggle.com/code/koushikkumardinda/asth-net-anisotropic-spine-tangent-hysteresis), notebook SHA-256 `8930cd90379251c2095061f459bc7208198345e6fa53bb25036f75eae9381b9e`. It caps training at 160 chronologically sorted observations, validates on at most 20 later observations, and sets three epochs. Its custom scorer uses one-to-one matching, while its spine weighting depends on optional `spine` metadata not established in the competition annotations. It supplies neither frozen-split evidence nor a reproducible model result; not adopted.
+- These audits produced no new validated candidate. They reinforce retaining the EquiNexus frozen split, official scorer, and existing submission pool while the local OOF run completes.
+
+
+## 2026-11-13 09:13 UTC patch OOF fold 1 complete
+
+- Fold 1 completed all 40 training epochs and all four eight-view prediction snapshots for its 113 held-out training observations. Fold 2 started and reached epoch 2/40 at the last poll; fold 0 and fold 1 completion manifests are present. No aggregate score is available until all five folds finish and the official grouped OOF sweep completes. The fixed holdout remains untouched.
+
+
+## 2026-11-13 09:26 UTC patch OOF fold 2 checkpoint
+
+- Fold 2 saved its epoch-16 checkpoint (training loss `0.227240`) and continued into epoch 17/40. Folds 0 and 1 have complete OOF predictions; fold 2 inference and folds 3-4 remain pending. The aggregate official grouped-PQ sweep has not started, and the fixed holdout remains untouched.
+
+
+## 2026-11-13 09:28 UTC Kaggle leaderboard refresh
+
+- Downloaded the current 1,511-team public leaderboard to `artifacts/kaggle/leaderboard/20261113T092802Z-utc/`; ZIP SHA-256 `6cb78ca7b782a8672683cba64c8c4b3a231c68e408b10d7e66f0394bc8546dc4`. EquiNexus is rank 327 at public score `0.39` with 35 submissions. The top six are IONode Online `0.70`, Tempest `0.64`, Sayandeep Dutta `0.62`, Harshit Kulkarni `0.62`, Tarunkush019 `0.62`, and Kush Patel `0.62`.
+- The five Nov 13 UTC submissions are complete: refs `58296190`, `58296201`, `58296209`, `58296219`, and `58296226` scored `0.39`, `0.38`, `0.38`, `0.39`, and `0.38`, respectively. They did not improve the team's public best. This public rank remains secondary to frozen grouped PQ and does not change the validation gate.
+- The submission history and leaderboard ZIP are both archived in the timestamped folder above.
+
+
+## 2026-11-13 09:30 UTC patch OOF fold 2 checkpoint
+
+- Fold 2's epoch-20 checkpoint is present, and training reached epoch 22/40 at the last poll. Folds 0 and 1 remain complete with all four prediction snapshots; fold 2 inference and folds 3-4 are pending. The aggregate scorer has not run, and the fixed holdout remains untouched.
+
+
+## 2026-11-13 09:32 UTC patch OOF fold 2 checkpoint
+
+- Fold 2 saved its epoch-24 checkpoint (training loss `0.213705`) and continued into epoch 25/40. The checkpoint file is present. OOF inference for fold 2 and training/inference for folds 3-4 remain pending; no aggregate PQ is available, and the 142-observation holdout remains untouched.
+
+
+## 2026-11-13 09:45 UTC patch OOF fold 2 training complete
+
+- Fold 2 completed all 40 epochs (final training loss `0.206392`) and saved the epoch-40 checkpoint. Its epoch-16 OOF inference is underway at 30/113 observations; the remaining three snapshot passes and folds 3-4 are pending. GPU temperature briefly reached 83 C with 1.9 GiB allocated. No aggregate score is available, and the fixed holdout remains untouched.
+
+
+## 2026-11-13 09:50 UTC patch OOF fold 2 complete
+
+- Fold 2 completed all four eight-view inference passes over its 113 held-out training observations and wrote its completion manifest. Fold 3 has started training (epoch 1/40). Three of five fold manifests are complete; folds 3-4 and the aggregate official-PQ sweep remain pending. The frozen holdout remains untouched.
+
+
+## 2026-11-13 10:02 UTC patch OOF fold 3 checkpoint
+
+- Fold 3 saved its epoch-16 checkpoint (training loss `0.239081`) and continued into epoch 17/40. Folds 0-2 remain complete; fold 3 training/inference and fold 4 remain pending. No aggregate official-PQ score is available, and the fixed holdout remains untouched.
+
+
+## 2026-11-13 10:03 UTC Nov 14 candidate batch preflight
+
+- Re-ran `scripts/submit_prepared_batch.py --manifest artifacts/submissions/filament-20261114-component-selector-rf-oof-batch.json`. All five candidates passed the fresh dry run against source commit `48f6487f3caa97f4df95db417131e87d929201aa` and frozen split digest `30cb2ec52437daf97e769a3a61bf83350062e6cf4f5d00af1f8399649065e48e`; manifest CSV hashes and instance counts match the files.
+- Matched each candidate's CSV hash to its stored RLE validation report. All five reports cover 180 supplied test images, round-trip every row at 2048x2048, report unique filament IDs, nonempty masks, and zero overlap pixels. Round-tripped rows: 981, 1,529, 1,148, 933, and 1,436.
+- The three candidates with EquiNexus frozen grouped OOF evidence score `0.443089`, `0.441954`, and `0.431139`, each below the `0.459116` incumbent. The learned-filter public U-Net and YOLO26x entries remain explicitly test-only/upstream-provenance candidates, without EquiNexus frozen-split scores. If a new OOF-supported model or fusion passes the existing promotion gate before submission, replace the weakest batch entry only after its test CSV and RLE report are generated and validated.
+
+
+## 2026-11-13 10:06 UTC patch OOF fold 3 checkpoint
+
+- Fold 3's epoch-20 checkpoint is present (training loss `0.226315`); training reached epoch 21/40 at the last poll. Folds 0-2 remain complete. Fold 3 inference, fold 4, and the grouped official-PQ sweep remain pending; the holdout is untouched.
+
+
+## 2026-11-13 10:23 UTC patch OOF fold 3 complete
+
+- Fold 3 completed all 40 epochs; final training loss was 0.210138. The saved epoch-16 inference is underway at 20/113 observations. Folds 0-2 have complete OOF manifests; fold 4 and the official grouped-PQ sweep remain pending. The 142-observation holdout remains untouched.
+- Verified the run fold map against the frozen split: exactly 565 training observations, 113 in each of five folds, and zero overlap with the 142-observation holdout. Split digest remains 30cb2ec52437daf97e769a3a61bf83350062e6cf4f5d00af1f8399649065e48e.
+- Independently compared every fold assignment with `data/splits/observation_oof_seed42_5fold.csv`; all 565 assignments match. Run fold-map SHA-256: `18f4f3ed4ba96a7f6f218b662bfe028c358e2a6ff2ed2025fa7fc586743d7c99`.
+
+## 2026-11-13 10:26 UTC patch OOF fold 3 complete
+
+- Fold 3 completed training and all four eight-view OOF prediction snapshots for its 113 validation observations; its completion manifest is present. Fold 4 training has started at epoch 1/40. The official grouped-PQ sweep waits for fold 4 predictions, and the 142-observation holdout remains untouched.
+- The patch-run fold map exactly matches the canonical five-fold manifest, with 565 observations and 113 per fold. Split digest and fold-map SHA-256 are recorded above.
+## 2026-11-13 10:28 UTC leaderboard and submission refresh
+
+- Archived a fresh 1,511-team leaderboard snapshot at `artifacts/kaggle/leaderboard/20261113102841-utc/`; ZIP SHA-256 is `0ed643f7d2ce2982497a2213f71c580a2d9cc155a6871898f5d60d2cef8bef28`. EquiNexus remains rank 327 at `0.39` with 35 submissions. The top six scores are IONode Online `0.70`, Tempest `0.64`, Sayandeep Dutta `0.62`, Harshit Kulkarni `0.62`, Tarunkush019 `0.62`, and Kush Patel `0.62`.
+- Kaggle API confirms all five Nov 13 submissions are complete at `0.38-0.39`; none improves the public best. Submission history is in the same timestamped archive. Public scores remain secondary to the frozen grouped official scorer.
+## 2026-11-13 10:31 UTC patch trainer archived
+
+- Copied the active OOF runner byte-for-byte to `scripts/experiments/train_native_unet_softmean_patches.py`; its SHA-256 exactly matches the source hash recorded at launch (`2c89dffea15071af547106d42298360ad0adc92e2c92f486b0f12f28b560d8c6`). The tracked copy's CLI help succeeds, and run metadata records its archive path.
+- Updated the scheduled 19:50 checkpoint allowlist and Conventional Commit message so today's single commit includes this reproducible trainer when the task runs.
+## 2026-11-13 10:39 UTC frozen-holdout comparator prepared
+
+- Re-scored the incumbent public U-Net + YOLO11s holdout RLE through the shared official scorer to preserve bootstrap-ready per-observation counts. It reproduces PQ `0.4546683971185862` across all 142 observations and 232 annotator views with the unchanged split digest; no model selection or tuning was performed. Counts and input hashes are under `artifacts/model-experiments/public-unet-yolo-family-vote-holdout-tta8-conf025-20261111/`.
+## 2026-11-13 10:42 UTC patch OOF fold 4 checkpoint
+
+- Fold 4 saved its epoch-20 checkpoint (training loss `0.209670`) and continued at epoch 21/40. Its epoch-16/20/24/40 OOF prediction passes remain pending; the aggregate grouped-PQ sweep and holdout gate have not run.
+## 2026-11-13 10:49 UTC scheduled task guard alignment
+
+- Updated tonight's Kaggle run and submission preflight guards to accept the exact untracked trainer archive plus the two sprint logs. Both PowerShell scripts parse, and simulated path checks pass; the Kaggle task still requires `HEAD == origin/main` and pushes the existing notebook bundle without incorporating local source edits. The 19:50 daily checkpoint remains the only commit/push.
+## 2026-11-13 10:50 UTC candidate batch revalidation
+
+- Re-ran the Nov 14 five-candidate dry run after adjusting the scheduled task guards. All five manifests and RLE hashes remain valid against source commit `48f6487f3caa97f4df95db417131e87d929201aa` and frozen split digest `30cb2ec52437daf97e769a3a61bf83350062e6cf4f5d00af1f8399649065e48e`; no candidate was submitted early.
+## 2026-11-13 10:58 UTC patch OOF fold 4 training complete
+
+- Fold 4 completed all 40 epochs (final training loss `0.200911`) and started the epoch-16 OOF inference pass at 10/113 observations. All five folds have completed training. Four fold inference passes, the official grouped-PQ sweep, and the gated holdout decision remain pending.
+## 2026-11-13 11:03 UTC patch OOF fold 4 complete
+
+- Fold 4 completed all four eight-view OOF prediction passes over its 113 validation observations and wrote its completion manifest. All five fold manifests are present and the 565-observation OOF maps are complete; the full 432-setting grouped scorer sweep has started. No holdout score is available.
+
+## 2026-11-13 11:12 UTC grouped postprocessing sweep progress
+
+- The CPU-only scorer sweep reached 10/432 settings; its partial best is PQ `0.071089` at epoch 16. This early subset is not a promotion result. All predictions remain cross-fitted on the 565 frozen training observations; the independent holdout is untouched.
+## 2026-11-13 11:14 UTC Kaggle quota and evening schedule check
+
+- Kaggle reports GPU quota `0.00h` remaining until `2026-11-14T00:00:00Z` and TPU quota `20.00h`; the planned T4 job is scheduled for 19:05 Toronto, five minutes after GPU refresh. The T4 run, local cutoff, five-submission batch, status refresh, and daily checkpoint tasks all remain `Ready` at their planned times.
+
+## 2026-11-13 11:23 UTC leaderboard archive refresh
+
+- Downloaded the full public leaderboard through the authenticated Kaggle CLI. The archived ZIP SHA-256 is `b24b48b00495d5068cf9eb0048c582e0ba6b15b269f8ce8eae80494aaff6a088`; its CSV contains 1,510 teams. EquiNexus is rank 326 at `0.39`, with 35 submissions and latest submission at 05:07:50 UTC. The top scores are `0.70`, `0.64`, and `0.62` (four teams at `0.62`). The ZIP and Windows-safe extracted CSV are under `artifacts/kaggle/leaderboard/20261113T112245Z/` and ignored by Git.
+- Kaggle's authenticated submission history confirms all five Nov 13 entries completed at `0.38-0.39`; no score exceeds our prior `0.39` best. The local five-fold OOF predictions are complete and their 432-setting official-scorer sweep is running; the latest process poll confirmed it remains live and consuming CPU, with its last emitted progress at 20/432. The fixed holdout remains untouched.
+- Refreshed Kaggle's 100-entry competition-kernel listing at 11:24 UTC. Its reference set is identical to the 10:35 UTC listing; the CSV is `artifacts/kaggle/kernels/20261113T112424Z/public-kernels.csv` (SHA-256 `46eb2e9407c4ffa0695eea4a7b51c84bb7d86fcd2e61cba6408c9d3c8c2744f0`). The current `phuongncn/lb-0-70-topology-safe-solar-filaments-handoff` source hash matches the archived copy (`b59aea47798e2ccbaa6f14f0e3bd7505dddec20ceb7d4c37704521bbde02e49c`) under `artifacts/kaggle/reference-audit/phuongncn-lb070-topology-safe-20261113/`. This reiterates the existing I079 flip-4 inference reference and supplies no new validation evidence or candidate.
+
+## 2026-11-13 11:30 UTC grouped OOF sweep progress
+
+- The live CPU sweep advanced to 30/432 configurations; the partial best is PQ `0.080135` at epoch 16. This early subset is not a model-selection result. The 565 observations remain cross-fitted and the 142-observation frozen holdout remains untouched; the watcher is waiting for the complete OOF summary.
+
+## 2026-11-13 11:38 UTC final-fit promotion path prepared
+
+- Added `scripts/experiments/run_native_unet_softmean_patches_test_inference.py`. It refuses to train unless the frozen grouped OOF score exceeds `0.459116`, the independent holdout score exceeds `0.4546683971`, and the 20,000-resample paired observation bootstrap has a positive 95% lower bound and at least `0.975` probability of improvement. After those gates, it final-fits the selected epoch on all 707 competition training observations, predicts only the supplied 180 test images, and requires complete exact RLE validation.
+- The hidden holdout-triggered final-fit watcher is live as PID 28360. It waits for both holdout and bootstrap artifacts, then can replace only the weakest OOF-scored candidate after final test-RLE validation; it skips if the gates fail or its 18:45 Toronto cutoff passes. It was restarted before any holdout artifacts existed so its in-memory code reflects the final provenance, manifest rollback, experiment-log updates, and accurate pretrained-encoder description. The local 19:10 cutoff script includes the final-fit runner. Python compile/CLI-help, PowerShell parser checks, pending-path guard simulation, trainer-hash checks, and `git diff --check` passed.
+- At 11:38 UTC the independent OOF scorer remained live and advanced to 40/432 configurations. Partial best PQ is `0.083138` at epoch 16; no promotion conclusion is available, and the holdout remains untouched.
+
+## 2026-11-13 11:44 UTC grouped OOF sweep progress
+
+- The same live sweep advanced to 50/432 settings; partial best PQ is `0.085606` at epoch 16. This remains an incomplete search result. The holdout-triggered validation and final-fit watchers are alive but have no promotion artifacts to act on.
+
+## 2026-11-13 11:51 UTC grouped OOF sweep progress
+
+- The live sweep reached 60/432 settings; partial best PQ is `0.088203` at epoch 16. The run remains active and the fixed holdout remains untouched.
+
+## 2026-11-13 11:59 UTC grouped OOF sweep progress
+
+- The active sweep reached 70/432 settings. The partial best remains PQ `0.088203` at epoch 16; the search is incomplete and has not triggered holdout evaluation.
+
+## 2026-11-13 12:06 UTC grouped OOF sweep progress
+
+- The active cross-fitted sweep reached 80/432 settings; partial best PQ increased to `0.089747` at epoch 16. This incomplete result does not trigger holdout evaluation.
+
+## 2026-11-13 12:13 UTC grouped OOF sweep progress
+
+- The active sweep reached 90/432 settings; partial best PQ is `0.090753` at epoch 16. This is not a promotion result; the independent holdout remains untouched.
+
+## 2026-11-13 12:21 UTC grouped OOF sweep progress
+
+- The active sweep reached 100/432 settings; partial best PQ is `0.092743` at epoch 16. The search is incomplete and the holdout remains untouched.
+
+## 2026-11-13 12:29 UTC grouped OOF sweep progress
+
+- The active sweep reached 110/432 settings; partial best PQ increased to `0.096411` at epoch 16. Available host RAM was 4.37 GiB, the process remained responsive, and the GPU was idle. The independent holdout remains untouched.
+
+## 2026-11-13 12:36 UTC grouped OOF sweep progress
+
+- The active sweep reached 120/432 settings; partial best PQ is `0.127452` at epoch 20. The search is incomplete and the independent holdout remains untouched.
+
+## 2026-11-13 12:43 UTC grouped OOF sweep progress
+
+- The active sweep reached 130/432 settings; partial best remains PQ `0.127452` at epoch 20. The independent holdout remains untouched.
+
+## 2026-11-13 12:47 UTC source checkpoint preflight
+
+- Verified branch `main`, local HEAD `48f6487f3caa97f4df95db417131e87d929201aa`, and `origin/main` still match. The only worktree paths are the two sprint logs and the expected experiment scripts; `git diff --check` passes. Tonight's Conventional Commit and push remains scheduled after submissions.
+
+## 2026-11-13 12:51 UTC grouped OOF sweep progress
+
+- The active sweep reached 140/432 settings; partial best remains PQ `0.127452` at epoch 20. The run is live, host RAM has about 4.4 GiB available, and the fixed holdout is untouched.
+
+## 2026-11-13 12:59 UTC grouped OOF sweep progress
+
+- The active grouped OOF postprocessing sweep reached 150/432 settings; partial best PQ remains `0.127452` at epoch 20. The run remains CPU-active and responsive, with about 4.27 GiB RAM available and the RTX 5070 idle. No holdout evaluation has started.
+
+## 2026-11-13 13:09 UTC grouped OOF sweep progress
+
+- The active grouped OOF postprocessing sweep reached 160/432 settings; partial best PQ remains `0.127452` at epoch 20. Process CPU time continues to increase, RAM availability remains stable near 4.3 GiB, and the GPU is idle. The holdout remains untouched.
+
+## 2026-11-13 13:14 UTC grouped OOF sweep progress
+
+- The grouped OOF postprocessing sweep reached 170/432 settings; partial best PQ remains `0.127452` at epoch 20. The Python process remains CPU-active, about 4.4 GiB RAM is available, and no holdout evaluation has started.
+
+## 2026-11-13 13:22 UTC grouped OOF sweep progress
+
+- The grouped OOF postprocessing sweep reached 180/432 settings; partial best PQ remains `0.127452` at epoch 20. The run remains active; no holdout evaluation has started.
+
+## 2026-11-13 13:31 UTC grouped OOF sweep progress
+
+- The grouped OOF postprocessing sweep reached 190/432 settings; partial best PQ remains `0.127452` at epoch 20. The CPU process is active and the independent holdout remains untouched.
+
+## 2026-11-13 13:40 UTC grouped OOF sweep progress
+
+- The grouped OOF postprocessing sweep reached 200/432 settings; partial best PQ remains `0.127452` at epoch 20. The process continues to accrue CPU time, and the holdout watcher remains gated on the final OOF result.
+
+## 2026-11-13 13:48 UTC grouped OOF sweep progress
+
+- The grouped OOF postprocessing sweep reached 210/432 settings; partial best PQ remains `0.127452` at epoch 20. The Python process is still CPU-active, with no holdout evaluation yet.
+
+## 2026-11-13 13:56 UTC grouped OOF sweep progress
+
+- The grouped OOF postprocessing sweep reached 220/432 settings; partial best PQ remains `0.127452` at epoch 20. The scorer process is CPU-active and the holdout remains untouched. Available RAM is about 3.5 GiB, so memory is being watched.
+
+## 2026-11-13 14:03 UTC grouped OOF sweep progress
+
+- The grouped OOF postprocessing sweep reached 230/432 settings. Partial best PQ increased to `0.138875` at epoch 24. The process remains CPU-active; about 3.47 GiB RAM is available, and the RTX 5070 remains idle. The independent holdout is untouched.
+
+## 2026-11-13 14:09 UTC grouped OOF sweep progress
+
+- The grouped OOF postprocessing sweep reached 240/432 settings; partial best PQ increased to `0.142573` at epoch 24. The scorer remains CPU-active. Available RAM is about 2.9 GiB on this poll and has fluctuated; the process has stayed responsive, but memory remains under observation. The holdout is untouched.
+
+## 2026-11-13 14:16 UTC grouped OOF sweep progress
+
+- The grouped OOF postprocessing sweep reached 250/432 settings; partial best PQ remains `0.142573` at epoch 24. The CPU process remains active, its private memory is about 5.2 GiB, and available system RAM is about 2.9 GiB. The process is responsive and the holdout remains untouched.
+
+## 2026-11-13 14:24 UTC grouped OOF sweep progress
+
+- The grouped OOF postprocessing sweep reached 260/432 settings; partial best PQ remains `0.142573` at epoch 24. The Python process continues to accrue CPU time, and the holdout remains untouched.
+
+## 2026-11-13 14:32 UTC grouped OOF sweep progress
+
+- The grouped OOF postprocessing sweep reached 270/432 settings; partial best PQ remains `0.142573` at epoch 24. The process remains active, with about 2.8 GiB RAM available on the latest check. The independent holdout remains untouched.
+
+## 2026-11-13 14:38 UTC grouped OOF sweep progress
+
+- The grouped OOF postprocessing sweep reached 280/432 settings; partial best PQ remains `0.142573` at epoch 24. The run remains CPU-active and memory has stayed near 2.8 GiB available over the last checks. The holdout is still untouched.
+
+## 2026-11-13 14:47 UTC grouped OOF sweep progress
+
+- The grouped OOF postprocessing sweep reached 290/432 settings; partial best PQ remains `0.142573` at epoch 24. The scorer process remains active and the holdout remains untouched.
+
+## 2026-11-13 14:53 UTC grouped OOF sweep progress
+
+- The grouped OOF postprocessing sweep reached 300/432 settings; partial best PQ remains `0.142573` at epoch 24. The scorer remains responsive, about 2.8 GiB RAM is available, and the independent holdout remains untouched.
+
+## 2026-11-13 15:02 UTC grouped OOF sweep progress
+
+- The grouped OOF postprocessing sweep reached 310/432 settings; partial best PQ remains `0.142573` at epoch 24. The process remains CPU-active, and the holdout gate is still waiting for completion.
+
+## 2026-11-13 15:08 UTC grouped OOF sweep progress
+
+- The grouped OOF postprocessing sweep reached 320/432 settings; partial best PQ remains `0.142573` at epoch 24. The process remains active, with about 2.9 GiB RAM available. The holdout remains untouched.
+
+## 2026-11-13 15:16 UTC grouped OOF sweep progress
+
+- The grouped OOF postprocessing sweep reached 330/432 settings; partial best PQ remains `0.142573` at epoch 24. Available RAM is about 1.2 GiB while the Python working set is about 19.5 GiB; both were stable across two checks, the process advanced, and roughly 16.7 GiB page-file space remains free. The holdout remains untouched.
+
+## 2026-11-13 15:25 UTC grouped OOF sweep progress
+
+- The grouped OOF postprocessing sweep reached 340/432 settings; partial best PQ remains `0.142573` at epoch 24. The Python working set is about 19.5 GiB and available RAM about 1.3 GiB, stable across checks with page-file capacity available. The run remains active and the holdout untouched.
+
+## 2026-11-13 15:34 UTC grouped OOF sweep progress
+
+- The grouped OOF postprocessing sweep reached 350/432 settings; partial best PQ remains `0.142573` at epoch 24. The process is active, and memory remains tight but stable. The holdout remains untouched.
+
+## 2026-11-13 15:41 UTC grouped OOF sweep progress
+
+- The grouped OOF postprocessing sweep reached 360/432 settings; partial best PQ remains `0.142573` at epoch 24. About 1.3 GiB RAM is available with roughly 16.7 GiB page-file capacity remaining; the scorer is responsive and the holdout remains untouched.
+
+## 2026-11-13 15:46 UTC grouped OOF sweep progress
+
+- The grouped OOF postprocessing sweep reached 370/432 settings; partial best PQ remains `0.142573` at epoch 24. Available RAM and process working set remain stable at roughly 1.3 GiB and 19.4 GiB. The holdout is still untouched.
+
+## 2026-11-13 15:53 UTC grouped OOF sweep progress
+
+- The grouped OOF postprocessing sweep reached 380/432 settings; partial best PQ remains `0.142573` at epoch 24. The scorer is still CPU-active, with about 1.3 GiB RAM available; the holdout remains untouched.
+
+## 2026-11-13 16:00 UTC grouped OOF sweep progress
+
+- The grouped OOF postprocessing sweep reached 390/432 settings; partial best PQ remains `0.142573` at epoch 24. The CPU process remains active and available RAM has held near 1.3 GiB. The holdout remains untouched.
+
+## 2026-11-13 16:08 UTC grouped OOF sweep progress
+
+- The grouped OOF postprocessing sweep reached 400/432 settings; partial best PQ remains `0.142573` at epoch 24. Available RAM is about 1.2 GiB, with 16.7 GiB page-file capacity remaining. The process remains CPU-active and the holdout untouched.
+
+## 2026-11-13 16:15 UTC grouped OOF sweep progress
+
+- The grouped OOF postprocessing sweep reached 410/432 settings; partial best PQ remains `0.142573` at epoch 24. The run is active, and the independent holdout remains untouched.
+
+## 2026-11-13 16:22 UTC grouped OOF sweep progress
+
+- The grouped OOF postprocessing sweep reached 420/432 settings; partial best PQ remains `0.142573` at epoch 24. The process remains responsive, available RAM is about 1.25 GiB, and the holdout is untouched.
+
+## 2026-11-13 16:29 UTC grouped OOF sweep complete
+
+- The five-fold grouped OOF run finished all 432/432 postprocessing settings in 30,615.611 seconds. It used the frozen split (`30cb2ec52437daf97e769a3a61bf83350062e6cf4f5d00af1f8399649065e48e`), 565 training observations, and 922 annotator views. Training ran on the RTX 5070 Laptop GPU; the largest fold peak was about 806 MiB, with 2.71 GPU-training hours in total.
+- The best setting was epoch 24, probability threshold `0.35`, minimum area `400`, and closing kernel `9`. OOF PQ was `0.142573` across the 922 views (TP 1,865; FP 9,018; FN 4,623), below the incumbent OOF gate of `0.459116`. The promotion gate correctly recorded `holdout_not_run`; this candidate was not evaluated on or selected by the fixed holdout.
+- Run summary and sweep are under `artifacts/model-experiments/native-unet-softmean-patches512-oof-20261113/`; the gate decision is in `artifacts/automation/patch-holdout-gate-20261113.jsonl`. Source commit was `48f6487f3caa97f4df95db417131e87d929201aa`, with trainer SHA-256 `2c89dffea15071af547106d42298360ad0adc92e2c92f486b0f12f28b560d8c6`. System RAM recovered to about 20.8 GiB after the process exited.
+
+## 2026-11-13 16:35 UTC live Kaggle refresh
+
+- The Kaggle API reports all five Nov 13 submissions complete with public scores `0.38`, `0.39`, `0.38`, `0.38`, and `0.39`. EquiNexus is rank `327/1512` at score `0.39`, with 35 team submissions. Current leaders include IONode Online `0.70`, Tempest `0.64`, and four teams at `0.62`.
+- Archived the full leaderboard and submission listing under `artifacts/kaggle/leaderboard/20261113163508-utc/`; archive SHA-256 is `e435aae24dd4d4f9f418133dd5e84114ba9c75b6906267f2596b5f76342d7c61`. The five-entry Nov 14 batch still passes its dry run; its public-model candidates are not eligible for promotion to the separate local final-fit path without fresh frozen-split/holdout evidence.
+
+## 2026-11-13 16:38 UTC submission preflight refresh
+
+- Revalidated the five-entry Nov 14 batch against source commit `48f6487f3caa97f4df95db417131e87d929201aa` and frozen split `30cb2ec52437daf97e769a3a61bf83350062e6cf4f5d00af1f8399649065e48e`. All five hash-locked CSVs pass dry-run validation; this did not upload them. The learned-filter and YOLO26x entries remain marked with their public-source/test-only validation limits.
+
+## 2026-11-13 16:42 UTC review of the updated prvsiyan notebook
+
+- Pulled `prvsiyan/notebook24a4dce69e` v18, source SHA-256 `622c847e5c715e091a4146c1cff777d8ef1511ae7f60c1d25b6192d709412629`. Its Nov 13 update combines six public model families, retaining rows supported at IoU `>0.5` by at least three families and requiring IoU `>=0.6` from every supporter when exactly three agree. The author reports public PQ `0.40` and explicitly says the notebook trains no models and reads no labels.
+- The attached model is Apache-2.0 I079 weights and the cited public outputs are reported as Apache-2.0. This is a test-time public-output vote, so its public-board result is exploratory evidence; the notebook itself cautions that a vote over other authors' CSVs cannot reproduce a final model-and-weights deliverable. Kaggle reported this kernel still `RUNNING` at 16:42 UTC, and no output files were available to evaluate or add to the batch.
+- Source and metadata are archived under `artifacts/kaggle/kernels/20261113163900-utc/prvsiyan/`.
+
+## 2026-11-13 17:06 UTC public vote candidate added to the Nov 14 batch
+
+- The updated `prvsiyan` Kaggle kernel completed on CPU in 5,792.47 seconds with training disabled. Its six-family test-output vote produced 1,274 instances; source notebook SHA-256 is `622c847e5c715e091a4146c1cff777d8ef1511ae7f60c1d25b6192d709412629`. The exact output's MD5 matches its consensus report; SHA-256 is `2a24d525c22c3f0891a31ac5d060f73fb2399f8b3c1aff3526d423cc1c04cd9c`.
+- Independent checks decoded all 1,274 masks at 2048×2048, confirmed unique IDs, pixel-disjoint masks, and coverage of all 180 supplied test images. No test labels were read. The exact CSV has no frozen OOF/holdout or public score; the notebook's `0.40` statement refers to an earlier five-family version and is not attributed to this output.
+- Replaced the weakest frozen-OOF-scored entry (public U-Net + YOLO11s confidence 0.50, OOF PQ `0.431139`) with this explicitly exploratory public-vote candidate. The five-entry manifest passed dry-run validation again; no submission has been uploaded yet. Candidate and provenance: `artifacts/submissions/prvsiyan-six-family-consensus-20261114/`.
+
+## 2026-11-13 17:08 UTC public-output source consistency check
+
+- The six-family notebook's own Mask R-CNN 0.70-cut CSV reproduces its stated upstream MD5 exactly (`09c0eae5fdff29a91f8a740475ecaf36`). This strengthens the source lineage for the vote but does not establish a score for the final consensus CSV.
+
+## 2026-11-13 17:17 UTC Kaggle access and Nov 14 batch preflight
+
+- The saved Kaggle refresh credential renewed the expired access token without opening a browser. Competition submissions, submission limits, and accelerator quota are readable again.
+- Kaggle reports 0.00 GPU hours remaining until `2026-11-14T00:00:00+00:00` (19:00 Toronto), so the scheduled T4 run remains queued for the quota reset. The current competition submission limit is also exhausted for today and resets at the same time.
+- Revalidated all five hash-locked Nov 14 CSVs against source commit `48f6487f3caa97f4df95db417131e87d929201aa` and the frozen split digest. The dry run passed; no submissions were uploaded in this check.
+## 2026-11-13 17:21 UTC leaderboard and public-source refresh
+
+- The archived public leaderboard contains 1,512 teams. EquiNexus remains rank 327 at 0.39 with 35 submissions; the leading scores are unchanged at 0.70, 0.64, and 0.62. The archive is under `artifacts/kaggle/leaderboard/20261113172000-utc/` (CSV SHA-256 `9bdae09e504282cf393e023674f2cddaeb45bb84b66524fb675ac79c46f6e1a2`).
+- Rechecked the public I079 topology-safe handoff. Its generated CSV SHA-256 `8c064a0da930de9add44e63eef1b0cb4ca85325ed74f224403938232f4beb2dc` matches EquiNexus submission 58110863, which scored 0.34; it is a repeat, not a new 0.70 result. The six-family vote remains a separate, unscored test-only candidate.
+- Audited the latest public notebook releases. The updated Huy notebook uses the already reviewed ten-model public U-Net weights; Jamie Nojek publishes a scratch-U-Net reproducibility release with a non-comparable split; and the MAGFiLO-trained standalone demo does not document separation from competition test labels. None replaces a candidate in the current five-entry batch.
+
+## 2026-11-13 17:53 UTC ASTH-Net public notebook review
+
+- Pulled `koushikkumardinda/asth-net-anisotropic-spine-tangent-hysteresis` from Kaggle. The source notebook is archived at `artifacts/kaggle/kernels/20261113-asth-net-source/` with SHA-256 `8930cd90379251c2095061f459bc7208198345e6fa53bb25036f75eae9381b9e`.
+- The notebook proposes limb-darkening correction, dual-threshold connected components, tangent-based fragment bridging, and a small ResUNet. Its local screen trains for three epochs on at most the first 160 chronologically sorted annotation records and evaluates 20 later records; this is not our frozen observation-grouped split.
+- Its custom metric performs one-to-one matching, while the organizer's scorer counts every qualifying pair above IoU 0.5. The notebook provides no EquiNexus frozen-split result or retrievable trained checkpoint, so it does not qualify for the submission batch. We did not copy its code or adopt its reported score.
+- The second local SWEFil download under `data/raw/SWEFil` matches all 557 source files under the canonical `data/external/SWEFil` path byte-for-byte; the external directory also contains the audit manifests. A recursive cleanup attempt was blocked by the environment, so the redundant ignored copy remains inside `data/` pending workspace cleanup.
+## 2026-11-13 18:00 UTC review of public V18 multi-annotator detector notebook
+
+- Pulled `muhammadshoaibaltaf/magfilo-v1-evaluation-aligned-solar-filament-s`; archived source SHA-256 `ee91ebbacf63babd0b828ca9d285290bde6260ad22945b4f33ee1d3931b28d3f` under `artifacts/kaggle/kernels/20261113-magnfilo-v1-eval-source/`.
+- V18 groups duplicate image records by physical filename and merges cross-annotator filament instances when mask IoU is at least 0.40, then fine-tunes a YOLO detector while keeping the crop U-Net fixed. Its scorer counts every IoU > 0.5 pair and reuses predictions against each annotator view, matching the organizer's key PQ semantics.
+- The notebook reserves 40 calibration and 67 comparison photos from a 107-photo validation group, but acknowledges those images were used in earlier project selection. It depends on public V10/V12 checkpoints whose exact provenance and license were not audited here. Kaggle reports the kernel as `CANCEL_ACKNOWLEDGED`; no run artifacts or submission CSV were downloadable, so the method is recorded for future evaluation and is not promoted.
+
+## 2026-11-13 18:24 UTC public five-family consensus rebuild (later withdrawn)
+
+- Audited the six public CSV inputs used alongside the notebook's Mask R-CNN output. Excluded the YOLO11 crop-refiner output because its inference depends on Tienti checkpoints whose training-data provenance could not be independently verified. Updated the Kaggle notebook inputs and code so the excluded source is not loaded.
+- The first local build stopped at its hash guard because it had selected our newer topology-safe I079 variant. Switched to the archived `submission_thr070.csv` from the reviewed prvsiyan run, which matches the notebook's expected MD5 `09c0eae5fdff29a91f8a740475ecaf36`.
+- Rebuilt the vote with five families: U-Net ensemble, Mask R-CNN, YOLO26 + U-Net++, YOLO26x-seg, and EdgeAttNet. This was test-only; the local run did not train or read competition test annotations. It used strict IoU > 0.5, required at least three families and IoU >= 0.6 from every supporter when exactly three agreed, clipped overlaps, and backfilled the best-voted mask only for otherwise-empty images.
+- The candidate contains 1,227 nonempty 2048x2048 RLE masks over all 180 test images. Masks are pixel-disjoint per image; 6 masks were clipped and 2 images backfilled. The CSV SHA-256 is `857ecf2f6ae2fca5b9192a8a9d415413ab2bc87848cf966525f2fc7ce6916075` (MD5 `0551032eb99248efaacbc024cbce8378`). No frozen-split score or leaderboard result is claimed.
+- Replaced slot 4 in the Nov 14 submission manifest with this candidate. The complete five-candidate manifest dry-run passed at 2026-11-13 18:24 UTC with the frozen split digest `30cb2ec52437daf97e769a3a61bf83350062e6cf4f5d00af1f8399649065e48e`.
+- Visual QA is archived as a montage and a full-resolution example. Spot checks covered images `20110130110334Ch`, `20140118180214Mh`, and `20140519195834Ch`; the masks render as thin, localized candidates. This confirms rendering and coverage only, not completeness or expert-quality continuity.
+
+## 2026-11-13 18:37 UTC submission and checkpoint readiness
+
+- Kaggle API authentication is working. The live read-only quota check reports 5 submissions used and 0 available until 2026-11-14 00:00 UTC (19:00 Toronto); the five-candidate upload remains scheduled for 19:20 Toronto.
+- The submit runner requires the solution source commit to be pushed and the code worktree clean. Scheduled the day's single commit and push for 18:55, before the Kaggle run and upload; the later 19:50 task now succeeds as a no-op if the repository is already clean. The Swin-T trainer snapshot is archived under `scripts/experiments/` so the source-window task does not create a second tracked change.
+
+
+## 2026-11-13 19:12 UTC audit of newly surfaced public kernels
+
+- Reviewed the current Kaggle code list sorted by public score. Lamhuy's notebook advertises 0.55, but its current source decodes an embedded base85/lzma `CHAMPION_PAYLOAD` CSV and copies its precompiled RLE masks to the test image IDs; the trained U-Net does not generate the submitted masks. A public comment alleges the payload is hardcoded test ground truth. Its provenance is unverified, so the source and output are excluded under the host's test-label restriction.
+- Foysal's Apache-2.0 notebook trains an ImageNet-initialized ResNet34 U-Net on binary unions of competition training annotations, with a random 80/20 filename split and Dice/BCE validation. It does not report frozen-split official instance PQ, so it remains a reference only.
+- Pavlo's 0.90 public-score baseline also uses a random image split and emits empty masks when no components survive thresholding. The public score is not treated as segmentation evidence. Ruhul's U-Net++/EfficientNet-B4 page reports 0.27 and a 7h18m runtime. None of these sources replaces a validation-supported candidate.
+- Notebook source snapshots and SHA-256 provenance are archived under `artifacts/kaggle/reference-notebooks/20261113-public-kernel-audit/`; the structured audit is `source-audit.json`. No embedded payload, public MAGFiLO test labels, or candidate CSV from these notebooks was used.
+
+## 2026-11-13 19:22 UTC interim leaderboard source audit
+
+- Archived Kaggle's 1,514-team public leaderboard at `artifacts/kaggle/leaderboard/202611131925-utc/leaderboard-20261113T192159.csv` (SHA-256 `b1518f8767f4383b1eccb582881299236b214b609accc05b2ed4122ad14f6007`). EquiNexus is rank 328 with score 0.39 and 35 submissions; the top displayed scores are 0.70, 0.64, and four teams at 0.62.
+- The newest 0.62 entry is Sayandeep Dutta (`duttasam`). Kaggle's competition-kernel search returned no public notebooks for `duttasam`, `ctogaurav`, or `cracker1war`; dataset and model searches also returned no public assets for these leading accounts. This refresh produced no new reproducible model source to evaluate. The compact leaderboard and source-search record is `leaderboard-summary.json` beside the CSV.
+- The host and participants document public-score integrity problems ([host warning](https://www.kaggle.com/competitions/filament-segmentation-2026/discussion/728062); [participant experiment](https://www.kaggle.com/competitions/filament-segmentation-2026/discussion/729809)). We keep model selection tied to the frozen official scorer and use the leaderboard only as secondary evidence; no method or validation threshold changed from this snapshot.
+## 2026-11-13 19:36 UTC consensus source and batch audit
+
+- Reparsed the 12-cell Kaggle reproduction notebook. Its six public-kernel inputs and source SHA-256 (`847b3f768b670ef53a2490e2c795d3199168ee0858aab571969bc0a0c75fc267`) match the rebuilt candidate metadata. The notebook source contains no reference to the excluded Tienti/YOLO11 source and no training or annotation-loading code.
+- Re-ran the five-candidate manifest in dry-run mode at 19:17 UTC. All five CSV hashes and image counts match, the frozen split digest remains `30cb2ec52437daf97e769a3a61bf83350062e6cf4f5d00af1f8399649065e48e`, and no uploads occurred in that check.
+- Cross-referenced the five saved RLE validation reports against the manifest. Every report hash matches its candidate; each reports 2048x2048 masks, unique IDs, nonempty masks, zero within-image overlap, exact round trips for all rows, and processing/coverage of all 180 test images.
+
+## 2026-11-13 19:55 UTC confidence-0.38 family-vote candidate
+
+- Screened YOLO11s confidence 0.38 using only the five-fold cross-fitted training partition and the frozen seed-42 split (`30cb2ec52437daf97e769a3a61bf83350062e6cf4f5d00af1f8399649065e48e`). Across 565 observations and 922 annotator views, official OOF PQ is 0.452845 (3,773 TP, 1,207 FP, 2,715 FN), improving on the current batch's confidence-0.45 variant (0.443089) while remaining below the previously screened confidence-0.35 result (0.455022).
+- The frozen 142-observation/232-view holdout was evaluated once after the OOF screen. Official PQ is 0.454046 (1,030 TP, 384 FP, 681 FN). Paired observation bootstrap versus the incumbent PQ 0.434930 gives +0.019116 (95% CI +0.006722 to +0.031517, 20,000 resamples, seed 42). The holdout did not select the confidence threshold.
+- Test-only inference on the 180 supplied H-alpha images produced 1,041 masks across 179 images. All 1,041 masks passed exact 2048x2048 RLE round trips, IDs are unique, masks are nonempty and pixel-disjoint, and one image has no predicted instance. CSV SHA-256: `0f58b488ee56cbab5eddac5432d6749d67b85a91afdfd8a3bbffd39eeb8eea03`; run metadata and validation are under `artifacts/submissions/public-unet-yolo-family-vote-conf038-20261114/`.
+- Replaced the weaker confidence-0.45 variant in slot 1 of the five-candidate batch. The manifest dry run passed at 2026-11-13 19:55 UTC with all five candidates, their hashes, and the unchanged split digest; no submission was uploaded by that check.
+
+## 2026-11-13 20:00 UTC training-duration decision
+
+- The five-fold EfficientViT-B2 patch U-Net run already evaluated checkpoints through 40 epochs and consumed 30,615.6 seconds (about 8.5 hours). Its best grouped OOF PQ was 0.142573 at epoch 24; the best epoch-40 configuration scored 0.112639. This is far below the incumbent OOF PQ 0.459116, so more epochs on this same run are not justified and the model remains unpromoted.
+- Longer training can help when validation metrics and training diagnostics show underfitting, but epoch count alone is not a goal. For this model the OOF trend declined by epoch 40, and the run has already had a substantial training budget. Future longer runs should first show improving fold-level evidence on the frozen OOF protocol before consuming a larger budget.
+
+## 2026-11-13 20:08 UTC leaderboard and public-source refresh
+
+- Archived a fresh Kaggle snapshot with 1,514 leaderboard teams. EquiNexus is rank 328 at 0.39 with 35 total submissions. The displayed leaders are IONode Online at 0.70, Tempest at 0.64, and several teams at 0.62. The snapshot, full leaderboard, latest notebook list, and our submission history are in artifacts/kaggle/leaderboard/20261113-1503-toronto/.
+- Kaggle reports all five Nov 13 submissions complete: IDs 58296190, 58296201, 58296209, 58296219, and 58296226 scored 0.39, 0.38, 0.38, 0.39, and 0.38. This public score signal remains secondary to our frozen grouped scorer.
+- Reviewed the newly surfaced huendao/solar-filament-segmentation-challenge-2026 notebook (SHA-256 bbac8f2e65ccb0a11a24f73d04d3cd4b6579ad5c3bbc92fd5b771951741204e). It performs inference with the public ten-model Dariush U-Net weight set and connected-component filtering; it does not train or read labels. Its quoted OOF/public scores are upstream results, not our frozen-split evidence. This model family is already represented by the unscored public-model candidate in the Nov 14 batch.
+- Checked current public competition-kernel listings for the leading owners IONode Online, Kush Patel, ctogaurav, cracker1war, eunseobsim, refomi, and santmani; Kaggle returned no competition-tagged public kernels for them. HDJoJo's competition notebook remains the only public source among the checked account list and was already audited. No new reproducible top-account method was identified.
+
+## 2026-11-13 20:23 UTC Notoverkil public ensemble artifact (later excluded)
+
+- Reassessed the public notoverkil/solar-filament-weights release after the user authorized use of public model artifacts under their stated license terms. Its dataset card says AGPL-3.0 and reports public PQ 0.41 plus five-fold OOF PQ 0.4747. The current leaderboard independently lists the owner account at rank 140 with public score 0.41; we do not claim that the downloaded CSV is byte-identical to the owner's uploaded file.
+- The Kaggle dataset manifest hash-locks 25 model checkpoints across YOLO11m, Mask R-CNN, YOLO26m and ConvNeXt-Small U-Net, five refiners, a rescorer and a date-grouped five-fold map over the 707 competition training observations. Its source card still does not identify or include the advertised inference repository. We did not download the model weights and did not reproduce their inference code.
+- The dataset's published submission.csv hash matches its manifest (1b39b8d9447c1e7e703d4e848056bd9471e50a7b2616cb3027ad5f0972b8d73c). It passes the local RLE validator against all 180 supplied test images: 1,287 nonempty 2048x2048 masks on 178 images, two empty images, unique IDs, exact RLE round trips and zero within-image overlap. We read no public MAGFiLO test labels.
+- Added this public output as an exploratory test-only candidate in slot 2, replacing the weaker confidence-0.35 union candidate. Its upstream OOF and public scores remain attributed claims; no EquiNexus frozen-split or holdout score is claimed because the upstream folds differ and inference code is unavailable. The five-candidate hash preflight passes with the unchanged frozen split digest.
+
+
+## 2026-11-13 20:52 UTC Jnojek reproducibility release audit
+
+- Reviewed the competition notebook [Solar Filament Segmentation 2026](https://www.kaggle.com/code/jamienojek/solar-filament-segmentation-2026) and its pinned [GitHub release](https://github.com/jnojek/solar-filament-segmentation-2026/tree/ae5aceb337ddc3aacffa915b19e081f97d8b2d07). The notebook identifies submission 58294715 but does not state its public score.
+- The release describes a native-resolution grayscale U-Net trained from scratch using only competition training annotations, with test inference on the supplied H-alpha images. Its custom observation partition has 336 training, 115 development, 80 confirmation, 101 held-out Udaipur, and 75 purged observations; it is not our frozen seed-42 split.
+- The source reports PQ 0.3365 on development, 0.2931 on confirmation, and 0.3385 on the Udaipur site holdout, plus a reproducible 1,293-instance test CSV. These scores use a different split and are not directly comparable to our frozen grouped OOF or holdout results, so this model was not promoted.
+- The pinned GitHub tree contains no LICENSE file, and we did not establish a reuse license for its code or checkpoint. We did not run or use it in the submission batch. The 17.5 MB checkpoint remains only in the ignored source-audit archive under artifacts/kaggle/reference-refresh/; an attempted removal was rejected by the file-operation review.
+
+
+## 2026-11-13 21:06 UTC Kaggle CPU consensus reproduction
+
+- The Kaggle kernel mrinanksivakumar/equinexus-public-output-consensus-20261113 completed inference-only on CPU in 6,545.4 seconds. It produced a 1,227-row consensus submission covering all 180 supplied test images; no training or test-label evaluation was performed. The report records 2 backfilled rows and 6 clipped masks.
+- The first local CSV used CRLF while Kaggle emitted LF. An ordered comparison proved all 1,227 IDs and RLE strings were identical. We set the deterministic local CSV writer to LF and rebuilt into artifacts/submissions/public-five-family-consensus-20261114-lf-verify/ in 71.68 seconds. The rebuilt, prepared, and Kaggle CSVs now match byte-for-byte at SHA-256 9269d4bbe2556b98e07de59705565039bf06f541c757c6d8404d4b6929ae6d8c (MD5 656c9327ad7706fe938f0f13bd909d0d). Candidate metadata and the five-item manifest are hash-locked to that output.
+- The local validator confirms 1,227 exact 2048x2048 RLE round trips, unique nonempty IDs, zero within-image overlap, and coverage of all 180 images. The remote output and deterministic local rebuild are archived under artifacts/kaggle/runs/public-output-consensus-kaggle-20261113-retry/ and artifacts/submissions/public-five-family-consensus-20261114-lf-verify/.
+- The initial monitor download encountered PowerShell native-stderr handling. A direct Kaggle CLI download recovered all outputs; subsequent byte comparison and validation succeeded.
+
+## 2026-11-13 21:23 UTC local RTX 5070 public U-Net cross-fit diagnostic
+
+- Ran `scripts/evaluate_public_unet_fold_aware.py` on the local RTX 5070 with eight-view TTA and one view per pass. It scored 142 frozen-split validation observations across 232 annotator views using their source-fold checkpoints; split SHA-256 remained `30cb2ec52437daf97e769a3a61bf83350062e6cf4f5d00af1f8399649065e48e`.
+- Official scorer PQ was 0.447797 (TP 1,099; FP 564; FN 612). Inference took 189.81 seconds and peak GPU allocation was 3,405,122,048 bytes. Paired observation bootstrap versus the incumbent PQ 0.434930 estimated +0.012867 (95% CI -0.000146 to +0.026095; 20,000 resamples; seed 42).
+- Treat this as cross-fit diagnostic evidence, not an independent holdout promotion result. The public checkpoints were trained on five folds over all 707 competition training observations: each evaluated image was excluded from its own predictor, while other evaluated images could occur in other fold models' training data. The upstream keep rule was fixed and not retuned here. No test annotations or test labels were read.
+- The public dataset receipt reports training on competition-provided training observations and labels only. The weights are CC BY-NC-SA 4.0; use follows the user's direction to include public noncommercial research weights. Local run metadata, predictions, scorer report, overlays, and hardware details are under `artifacts/model-experiments/dariushafshar-unet-fold-aware-holdout-local-20261113/`.
+- A Kaggle T4 reproduction of the same fold-aware evaluation is scheduled for 19:05 Toronto to compare outputs and runtime. Its cross-fit metric remains exploratory rather than an independent holdout.
+
+## 2026-11-13 21:36 UTC I079 source audit
+
+- Kaggle's [I079 model card](https://www.kaggle.com/models/phuongncn/solar-filament-i079-weights) reports Apache 2.0 and training on competition training images and annotations only, excluding public MAGFiLO/test-overlap labels and leaderboard probes. The version is `PyTorch/detector-refiner/1`.
+- The [public handoff notebook](https://www.kaggle.com/code/phuongncn/lb-0-70-topology-safe-solar-filaments-handoff) claims an exact 1,299-row CSV at MD5 `09c0eae5fdff29a91f8a740475ecaf36` scored 0.70 twice. The current Kaggle page instead displays public and best score 0.34, so we treat 0.70 as an unreconciled upstream claim. The notebook itself is Apache 2.0; its archived SHA-256 is `b59aea47798e2ccbaa6f14f0e3bd7505dddec20ceb7d4c37704521bbde02e49c`.
+- Archived the unmodified notebook and private metadata at `notebooks/kaggle/i079_topology_safe_refiner/`. We did not schedule standalone inference or replace the prevalidated YOLO26x batch candidate. The I079 output remains a documented vote source in the five-family consensus, with no EquiNexus frozen-split score attributed to it.
+
+## 2026-11-13 21:50 UTC five-candidate submission revalidation
+
+- Re-ran `scripts/validate_submission_rles.py` separately on every manifest candidate and saved fresh reports as `artifacts/automation/rle-preflight-20261114-candidate-1.json` through `candidate-5.json`. All five SHA-256 values still match the submission manifest.
+- The candidates contain 1,041, 1,287, 1,148, 1,227, and 1,436 masks (6,139 total). Every RLE round-trips exactly at 2048x2048; each CSV covers all 180 supplied test images, has unique IDs and nonempty masks, and has zero within-image overlap pixels.
+- The five-candidate manifest still uses frozen split SHA-256 `30cb2ec52437daf97e769a3a61bf83350062e6cf4f5d00af1f8399649065e48e`; the dry-run preflight passes.
+
+## 2026-11-13 21:52 UTC audit of evaluation-aligned detector notebook
+
+- Reviewed `muhammadshoaibaltaf/magfilo-v1-evaluation-aligned-solar-filament-s` (source SHA-256 `ee91ebbacf63babd0b828ca9d285290bde6260ad22945b4f33ee1d3931b28d3f`). Its V18 method merges cross-annotator masks at IoU >= 0.40 and fine-tunes a YOLO detector initialized from V10, then evaluates a crop refiner initialized from V12.
+- The downloaded kernel metadata has blank dataset-source entries, while its code requires V10 and V12 checkpoint datasets. Their training-data provenance and license were not established here, so we did not download weights, run the method, or use its outputs. Its custom 107-photo calibration/comparison split is also not our frozen grouped split. The source snapshot is under `artifacts/kaggle/reference-refresh/20261113-1625-toronto/muhammadshoaibaltaf/`.
+
+## 2026-11-13 21:54 UTC confidence-fusion checkpoint provenance audit
+
+- Checked candidate 1's exact YOLO11s input hashes and linked run metadata. Its masks come from our own five-fold YOLO11s-seg run, initialized from `yolo11s-seg.pt` COCO weights (AGPL-3.0), then trained on competition-provided training annotations only. The five folds used the frozen 565-observation training partition; the 142-observation holdout was excluded from training and selection.
+- This candidate does not use the Tienti YOLO11 crop-refiner checkpoints excluded from the public-output consensus. The accompanying public U-Net predictions use the separately audited fold-aware competition-training-only weights. No test labels were used.
+
+## 2026-11-13 22:18 UTC leaderboard and public-kernel audit
+
+- Downloaded the full 1,515-team public leaderboard to the ignored snapshot `artifacts/leaderboard/full-20261113-1712-toronto/leaderboard.csv` (SHA-256 `6f6b9134e5b1b35efdd51b41c4b5405a73cc1d5f2d2fea4eeb837bfb2c9102d9`). EquiNexus is rank 329 at 0.39 with 35 submissions. The leader, IONode Online, is at 0.70; its public Kaggle kernels do not expose a competition solution. The next teams score 0.64 and 0.62.
+- [HDJoJo's public notebook](https://www.kaggle.com/code/hdjojo/solar-filament-segmentation) uses the [Apache-2.0 YOLO26x model](https://www.kaggle.com/models/hdjojo/yolo26x-seg-solar-filament); its team is rank 25 at 0.55 in the full leaderboard snapshot. The model card reports training on all 707 competition training observations, with exact folds unpublished, so our candidate 5 is test-only and has no frozen-holdout score. Its metadata records the local RTX 5070 inference run and AGPL-3.0 Ultralytics runtime. The upstream 0.55 is not an EquiNexus result.
+- [Lâm Huy](https://www.kaggle.com/code/lamhuy8904/solar-filament-unet-segmentation) is rank 56 at 0.55, but the public U-Net notebook's visible training uses only the first 60 training observations for five epochs, while submission generation consumes a compressed, precompiled `CHAMPION_PAYLOAD` CSV rather than that trained model. The prediction payload's provenance cannot be reproduced or verified, so it was not used. Archived source SHA-256: `906841cbc0e1f50b89bda6648b1c7f85eff16975e62c3679a120141aa172a687`.
+- [Robina Mirbahar](https://www.kaggle.com/code/robinamirbahar/solar-filament-panoptic-morphology-segmentation) is rank 43 at 0.55, but her downloaded panoptic notebook's code cells are identical to the already audited I079 inference notebook; the leaderboard score cannot be attributed to a new method in that notebook. [ASTH-Net](https://www.kaggle.com/code/koushikkumardinda/asth-net-anisotropic-spine-tangent-hysteresis) author is rank 1,263 at 0.26; that notebook trains for three epochs on at most the first 160 chronologically sorted observations and uses its own diagnostic, so it was not promoted. The recent [prvsiyan consensus notebook](https://www.kaggle.com/code/prvsiyan/notebook24a4dce69e) is rank 168 at 0.40.
+- No public MAGFiLO labels or test labels were accessed. The complete leaderboard and downloaded public kernel sources remain under ignored `artifacts/` for review.
+
+
+## 2026-11-13 22:34 UTC HDJoJo public-output comparison and submit preflight
+
+- Downloaded the published output of [HDJoJo's Kaggle kernel](https://www.kaggle.com/code/hdjojo/solar-filament-segmentation) via Kaggle API. The exact file is archived as `artifacts/submissions/hdjojo-yolo26x-upstream-20261114/submission.csv`, SHA-256 `035d5da13bc5898e8c331fc0e5ee21606e3e39e4419708a72529147f0a1ed9b6`. Full validation passed: 1,435 exact 2048x2048 RLE round trips, unique nonempty IDs, zero overlaps; inference covers all 180 input images, with predictions on 179 and no detections on one.
+- Candidate 3 now uses that exact public kernel output. Candidate 5 remains our local confidence-ordered inference from the same Apache-2.0 YOLO26x model. The CSVs share 1,433 IDs but only two exact RLE masks; prediction counts also differ on five images. The output comparison is archived at `artifacts/submissions/hdjojo-yolo26x-upstream-20261114/comparison-with-local-inference.json`. This is a test-time overlap-ordering ablation; neither variant has a frozen-holdout score because the public model card reports training on all 707 competition observations.
+- HDJoJo is rank 25 at 0.55 in the current full leaderboard, but the downloaded kernel's last public run was Nov 10 and the latest team submission was Nov 13. We do not attribute the team's current 0.55 to the exact downloaded file. No test labels were read.
+- A fresh batch dry run now validates five distinct hashes, including the new exact kernel output. The submitter's allowlist mismatch was fixed: its worktree guard now permits only the enumerated sprint logs, notebooks, archive scripts, and itself; it still requires `main`, pushed HEAD equality, and no staged or unrelated changes. A non-uploading invocation of the same guard passed against the current worktree.
+
+
+## 2026-11-13 22:40 UTC epoch-length review
+
+- The five-fold grouped Swin-T sweep improved from PQ 0.349162 at epoch 16 to 0.377095 at epoch 20 and 0.379023 at epoch 24; epoch 24 was best among tested checkpoints, but remains below the strongest OOF candidate at 0.459116.
+- The patch-based EfficientViT-B2 run rose from PQ 0.096411 at epoch 16 to 0.142573 at epoch 24, then fell to 0.112639 at epoch 40. The GONG-auxiliary run peaked at epoch 20 (0.387088), below at epoch 24 (0.380154).
+- This evidence supports training until grouped OOF performance plateaus, not an unconditional longer schedule. We did not spend the remaining sprint time on additional epochs for these sub-incumbent architectures; the selected validation epochs and full sweep files remain archived under ignored `artifacts/model-experiments/`.
+
+## 2026-11-13 23:00 UTC withdrawal of public-output consensus candidate
+
+- Re-auditing the five-family vote revealed that its U-Net inputs included both Tushhaaarrrr 0.37 and 0.40 outputs. The 0.37 training source uses prohibited MAGFiLO spine metadata; the 0.40 training recipe is unavailable. The vote also included the V11 output whose checkpoint provenance was not established. The prior section's “compliant” label was incorrect: local consensus code did not train or read labels, but these upstream predictions are not eligible under the host's mask-only training rule. The 1,227-row candidate was not submitted.
+- Moved the copied Kaggle consensus notebook and metadata to ignored `artifacts/kaggle/reference-audit/excluded-public-output-consensus-20261113/`. Its Kaggle CPU run and CSV remain archived for audit only and are excluded from the batch.
+- Replaced batch slot 4 with the existing local I079 topology-safe detector/refiner inference on supplied test H-alpha images. The Apache-2.0 model card limits training to competition training images and annotations; the local run report confirms no training annotations or public test labels were read during inference. Its 1,299 masks pass exact 2048x2048 RLE validation, cover 169 of 180 images, and have SHA-256 `2c07cf2f06ee85b721ccb11631d6876f693ac6516277ed2d1dcd179ee7eb0794`. No frozen-split score is claimed.
+- The five-candidate manifest dry run passes with all hashes and the unchanged split digest `30cb2ec52437daf97e769a3a61bf83350062e6cf4f5d00af1f8399649065e48e`.
+- Also removed the Notoverkil precompiled submission from slot 2. The public dataset includes hash-locked model files and reports competition-training-only folds, but does not identify or include the referenced inference repository, so we could not independently establish the exact CSV's image-inference lineage. Replaced it with the public Dariush ten-model U-Net learned-filter output (SHA-256 `f264ce76fff59ac146b10dbbe196c54d4eda80fbb2a34246540d137a6499ca55`). Its source notebook, CC BY-NC-SA 4.0 weight receipt, inference log, and 1,148 exact RLE round trips are archived. The publisher-reported nested OOF PQ is 0.455236 on a different protocol; no frozen-split score is claimed.
+
+## 2026-11-13 23:33 UTC public consensus reference and batch candidate
+
+- Pulled the current [prvsiyan public notebook](https://www.kaggle.com/code/prvsiyan/notebook24a4dce69e), SHA-256 `622c847e5c715e091a4146c1cff777d8ef1511ae7f60c1d25b6192d709412629`. Its Nov 13 update adds an EdgeAttNet refiner family and describes a label-free, test-output vote requiring three model families, IoU > 0.5, and stricter IoU for the minimum-vote case. Its cited public scores and input-agreement figures are upstream claims, not EquiNexus validation evidence.
+- The notebook's full six-family output remains excluded because it includes the previously audited Tushhaaarrrr predictions and sources whose training provenance was not eligible or independently established. We adopted only the general agreement-voting idea and built a separate candidate from three hash-locked batch inputs: EquiNexus's U-Net/YOLO11s fusion, HDJoJo YOLO26x, and I079 Mask R-CNN/refiner. Related YOLO26 variants and the duplicated Dariush U-Net family were not counted as extra voters.
+- `scripts/experiments/build_rule_compliant_test_consensus.py` processed the 180 supplied test image filenames and only the three candidate CSVs; it opened no test-image pixels or labels. Its rule is at least two family votes with IoU > 0.5, each vote at IoU >= 0.6 when exactly two families support a mask, 50% minimum remaining pixels after overlap clipping, and one highest-vote fallback only for images otherwise left empty.
+- The resulting exploratory candidate has 1,156 disjoint, nonempty 2048x2048 RLE masks over all 180 test images, SHA-256 `45688ce9ad0921aaa4fd4206e4fada2e0c62f33b896a7ddc2bdd729c7c28dcf6`. It includes 969 rows sourced from the EquiNexus fusion and 187 from HDJoJo; I079 masks contributed agreement evidence but no final row. Two images used fallback. It has no frozen-split metric and is not promoted on validation evidence; it replaces the redundant local confidence-order variant in the five-entry exploratory submission batch.
+- The full batch dry-run passes with five unique hashes and the unchanged split digest `30cb2ec52437daf97e769a3a61bf83350062e6cf4f5d00af1f8399649065e48e`. The consensus RLE report confirms 180/180 image coverage, unique IDs, exact decode/encode preservation, and zero within-image overlap.
+- Re-ran `scripts/validate_submission_rles.py` over the exact five manifest files. All 6,079 masks have exact 2048x2048 RLE round trips, unique IDs, nonempty masks, and zero overlap. Per-file image coverage was 179/180, 177/180, 179/180, 169/180, and 180/180; the validator reports are `artifacts/automation/rle-preflight-20261114/candidate-1.json` through `candidate-5.json`.
+- The consensus source script and all four relevant path allowlists (the Python submitter plus three automation scripts) now include the new tracked builder. PowerShell syntax parsing, Python compilation, `git diff --check`, and the five-candidate dry-run pass. The script’s candidate metadata records hashes for all three input CSVs and confirms no test-image pixel or label reads.
+
+## 2026-11-13 23:49 UTC CAGE model reference screen
+
+- The current Kaggle Models search also surfaced James Mills's public [CAGE Filament U-Net R4 model](https://www.kaggle.com/models/jamesmills1975/cage-filament-unet): a 24.4M-parameter 1024px ResNet-34 U-Net with mask, derived hull, and interior heads. Its model card says it trains only on competition training masks, uses CC BY-NC 4.0 weights, and reports held-out PQ 0.4022 on a random 100-entry split; some duplicate observations crossed that split, so this is not comparable to our frozen grouped protocol.
+- The Kaggle API listed the companion example notebook but denied access to its source (403). No weights were downloaded or used, and the model was not added to today's batch. Its derived-hull target is a reference for a future grouped-fold experiment; any adoption needs source-code review and evaluation on the frozen split.
