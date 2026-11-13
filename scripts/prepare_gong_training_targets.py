@@ -28,6 +28,7 @@ sys.path.insert(0, str(REPO_ROOT / "src"))
 import numpy as np
 
 from filament_baseline.data import load_dataset
+from filament_baseline.external_data import audit_external_target_ids
 from filament_baseline.split import create_observation_split
 
 DATASET_SLUG = "vhrabar/gong-solar-filaments"
@@ -209,14 +210,26 @@ def main() -> int:
         raise RuntimeError(f"Frozen split digest changed: {split.sha256}")
     training_names = set(split.training_names)
     validation_names = set(split.validation_names)
+    test_names = {
+        path.stem for path in dataset.test_image_dir.glob("*.jpeg") if path.is_file()
+    }
     if training_names & validation_names or (len(training_names), len(validation_names)) != (565, 142):
         raise RuntimeError("Frozen observation partitions failed their size or disjointness check")
+    if len(test_names) != 180:
+        raise RuntimeError(f"Expected 180 supplied test images, found {len(test_names)}")
 
     available = list_target_files(kaggle_cli_path())
+    external_temporal_audit = audit_external_target_ids(
+        candidate_ids=(Path(item["name"]).stem for item in available),
+        training_ids=(Path(name).stem for name in training_names),
+        validation_ids=(Path(name).stem for name in validation_names),
+        test_ids=test_names,
+    )
+    eligible_target_ids = set(external_temporal_audit["eligible_training_target_ids"])
     selected = [
         item
         for item in available
-        if f"{Path(item['name']).stem}.jpeg" in training_names
+        if Path(item["name"]).stem in eligible_target_ids
     ]
     validation_matches = sum(
         f"{Path(item['name']).stem}.jpeg" in validation_names for item in available
@@ -245,8 +258,11 @@ def main() -> int:
         "training_observations_with_targets": len(
             {Path(item["name"]).stem for item in available if f"{Path(item['name']).stem}.jpeg" in training_names}
         ),
+        "training_observations_with_eligible_targets": len(eligible_target_ids),
         "validation_target_assets_seen_in_file_listing_only": validation_matches,
         "validation_target_files_downloaded": 0,
+        "external_temporal_audit": external_temporal_audit,
+        "selected_target_ids": [Path(item["name"]).stem for item in selected],
         "selected_target_maps": len(selected),
         "selected_target_bytes": sum(item["size"] for item in selected),
         "target_metadata": {

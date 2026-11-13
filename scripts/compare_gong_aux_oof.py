@@ -264,7 +264,7 @@ def main() -> int:
     }
     output_path = candidate_dir / "oof-comparison-vs-native.json"
     output_path.write_text(json.dumps(comparison, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    print(json.dumps({"output": str(output_path.relative_to(REPO_ROOT)), **comparison["paired_bootstrap_candidate_vs_baseline"]}, flush=True))
+    print(json.dumps({"output": str(output_path.relative_to(REPO_ROOT)), **comparison["paired_bootstrap_candidate_vs_baseline"]}), flush=True)
     return 0
 
 

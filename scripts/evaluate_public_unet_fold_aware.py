@@ -20,10 +20,11 @@ from types import SimpleNamespace
 from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-os.environ.setdefault("TORCH_HOME", str(REPO_ROOT / ".cache" / "torch"))
-os.environ.setdefault("MPLCONFIGDIR", str(REPO_ROOT / ".cache" / "matplotlib"))
 sys.path.insert(0, str(REPO_ROOT / "src"))
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
+from workspace_runtime import configure_workspace_runtime
+
+configure_workspace_runtime(REPO_ROOT)
 
 import numpy as np
 import pandas as pd
@@ -323,9 +324,11 @@ def main() -> int:
         "source_inference_notebook": SOURCE_INFERENCE_NOTEBOOK,
         "source_license": "CC BY-NC-SA 4.0; attribution and ShareAlike terms apply",
         "source_training_provenance": "The dataset README states the checkpoints were trained only on competition training observations and labels, grouped into five folds by image; fold k checkpoint did not train on fold k images.",
-        "evaluation_partition": "frozen observation-grouped holdout" if args.partition == "holdout" else "five-fold cross-fitted observations from the frozen training partition",
-        "validation_protocol": "For each scored observation, only the two upstream checkpoints for the fold that held that observation out are averaged.",
-        "holdout_used_for_gradient_updates": False,
+        "evaluation_partition": "per-observation five-fold crossfit over the frozen holdout subset; not an independent holdout" if args.partition == "holdout" else "per-observation five-fold crossfit over the frozen training subset",
+        "validation_protocol": "Each scored observation uses only the two checkpoints for its upstream held-out fold. Because upstream folds partition all 707 observations, other observations from this evaluation subset may be used to train other fold models; interpret aggregate metrics as crossfit, not independent holdout.",
+        "target_observation_used_for_gradient_updates_by_its_predictor": False,
+        "evaluation_peers_used_for_gradient_updates_in_other_fold_models": True,
+        "strict_independent_frozen_holdout": False,
         "holdout_used_for_checkpoint_selection": False,
         "holdout_used_for_threshold_selection": False,
         "threshold_selection_source": "Upstream nested cross-validation; the keep rule is fixed and unchanged.",
@@ -353,6 +356,7 @@ def main() -> int:
         "metrics": metrics,
         "per_observation": per_observation,
         "comparison_vs_incumbent": comparison,
+        "comparison_interpretation": "Exploratory only: the public candidate is per-observation crossfit, while the incumbent was trained without any frozen-holdout groups; this is not an independent-holdout promotion gate.",
         "predictions": {"json": str(predictions_path), "json_sha256": sha256(predictions_path), "csv": str(csv_path), "csv_sha256": sha256(csv_path)},
         "runner_sha256": sha256(Path(__file__).resolve()),
         "source_commit": git_value("rev-parse", "HEAD"),
@@ -369,6 +373,7 @@ def main() -> int:
         "inference_seconds": inference_seconds,
         "peak_gpu_memory_allocated_bytes": peak_memory,
         "comparison_vs_incumbent": comparison,
+        "comparison_interpretation": "Exploratory only: the public candidate is per-observation crossfit, while the incumbent was trained without any frozen-holdout groups; this is not an independent-holdout promotion gate.",
         "metadata": str(metadata_path),
     }, indent=2), flush=True)
     return 0

@@ -24,9 +24,9 @@ from pathlib import Path
 from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-os.environ.setdefault("TORCH_HOME", str(REPO_ROOT / ".cache" / "torch"))
-os.environ.setdefault("HF_HOME", str(REPO_ROOT / ".cache" / "huggingface"))
-os.environ.setdefault("MPLCONFIGDIR", str(REPO_ROOT / ".cache" / "matplotlib"))
+from workspace_runtime import configure_workspace_runtime
+
+configure_workspace_runtime(REPO_ROOT)
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
 import cv2
@@ -57,6 +57,8 @@ DECODER_CHANNELS = (192, 96, 48, 24, 12)
 EPOCHS_DEFAULT = 24
 TTA_DEFAULT = 8
 SEED = 42
+CLDICE_PATCH_SIZE = 512
+CLDICE_ITERATIONS = 10
 _Y, _X = np.ogrid[:CROP_SIZE, :CROP_SIZE]
 _CROP_CENTER = (CROP_SIZE - 1) / 2.0
 _NORM_DISK = (_Y - _CROP_CENTER) ** 2 + (_X - _CROP_CENTER) ** 2 <= NORM_RADIUS**2
@@ -365,17 +367,74 @@ def make_optimizer(model: NativeResolutionUNet) -> torch.optim.Optimizer:
     return torch.optim.AdamW(groups)
 
 
-def binary_loss(logits: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+# Soft-clDice morphology follows Shit et al., CVPR 2021: https://openaccess.thecvf.com/content/CVPR2021/html/Shit_clDice_-_A_Novel_Topology-Preserving_Loss_Function_for_Tubular_Structure_Segmentation_CVPR_2021_paper.html
+def soft_erode(probability: torch.Tensor) -> torch.Tensor:
+    vertical = -F.max_pool2d(-probability, (3, 1), 1, (1, 0))
+    horizontal = -F.max_pool2d(-probability, (1, 3), 1, (0, 1))
+    return torch.minimum(vertical, horizontal)
+
+
+def soft_dilate(probability: torch.Tensor) -> torch.Tensor:
+    return F.max_pool2d(probability, 3, 1, 1)
+
+
+def soft_skeletonize(probability: torch.Tensor, iterations: int = CLDICE_ITERATIONS) -> torch.Tensor:
+    skeleton = F.relu(probability - soft_dilate(soft_erode(probability)))
+    eroded = probability
+    for _ in range(iterations):
+        eroded = soft_erode(eroded)
+        delta = F.relu(eroded - soft_dilate(soft_erode(eroded)))
+        skeleton = skeleton + F.relu(delta - skeleton * delta)
+    return skeleton
+
+
+def soft_cldice_loss(
+    probability: torch.Tensor,
+    target: torch.Tensor,
+    iterations: int = CLDICE_ITERATIONS,
+    eps: float = 1.0,
+) -> torch.Tensor:
+    """Differentiable centerline overlap for thin, branching filament masks."""
+    pred_skeleton = soft_skeletonize(probability, iterations)
+    target_skeleton = soft_skeletonize(target, iterations)
+    dimensions = (1, 2, 3)
+    topology_precision = ((pred_skeleton * target).sum(dim=dimensions) + eps) / (
+        pred_skeleton.sum(dim=dimensions) + eps
+    )
+    topology_sensitivity = ((target_skeleton * probability).sum(dim=dimensions) + eps) / (
+        target_skeleton.sum(dim=dimensions) + eps
+    )
+    return (1.0 - 2.0 * topology_precision * topology_sensitivity / (
+        topology_precision + topology_sensitivity
+    )).mean()
+
+
+def binary_loss(
+    logits: torch.Tensor,
+    target: torch.Tensor,
+    *,
+    cldice_weight: float = 0.0,
+) -> torch.Tensor:
     logits = logits.float()
     target = target.float()
     bce = F.binary_cross_entropy_with_logits(logits, target)
-    probability = torch.sigmoid(logits).flatten(1)
+    probability_map = torch.sigmoid(logits)
+    probability = probability_map.flatten(1)
     target_flat = target.flatten(1)
     intersection = (probability * target_flat).sum(dim=1)
     dice = 1.0 - (2.0 * intersection + 1e-6) / (
         probability.sum(dim=1) + target_flat.sum(dim=1) + 1e-6
     )
-    return 0.45 * bce + 0.55 * dice.mean()
+    loss = 0.45 * bce + 0.55 * dice.mean()
+    if cldice_weight > 0.0:
+        height, width = probability_map.shape[-2:]
+        patch_size = min(CLDICE_PATCH_SIZE, height, width)
+        top = random.randint(0, height - patch_size)
+        left = random.randint(0, width - patch_size)
+        probability_patch = probability_map[..., top : top + patch_size, left : left + patch_size]
+        target_patch = target[..., top : top + patch_size, left : left + patch_size]
+        loss = loss + cldice_weight * soft_cldice_loss(probability_patch, target_patch)
+    return loss
 
 
 def selected_epoch_checkpoints(epochs: int) -> tuple[int, ...]:
@@ -402,6 +461,7 @@ def train_model(
     device: torch.device,
     checkpoint_path: Path,
     fold_label: str,
+    cldice_weight: float = 0.0,
 ) -> tuple[NativeResolutionUNet, dict[str, Any]]:
     seed_everything(SEED + (int(fold_label) if fold_label.isdigit() else 1000))
     ordered_names = [names[index] for index in train_indices]
@@ -421,6 +481,7 @@ def train_model(
             and int(saved_config.get("crop_size", -1)) == CROP_SIZE
             and int(saved_config.get("epochs", -1)) == epochs
             and int(saved_config.get("batch_size", -1)) == batch_size
+            and float(saved_config.get("cldice_weight", 0.0)) == cldice_weight
             and all(path.is_file() for path in snapshot_paths.values())
         ):
             model = NativeResolutionUNet(pretrained=False).to(device)
@@ -481,7 +542,7 @@ def train_model(
         torch.cuda.reset_peak_memory_stats(device)
     print(
         f"[train:{fold_label}] {len(train_indices)} observations, {len(loader)} steps/epoch, "
-        f"batch={batch_size}, accumulation={accumulation}, epochs={epochs}",
+        f"batch={batch_size}, accumulation={accumulation}, epochs={epochs}, cldice_weight={cldice_weight}",
         flush=True,
     )
     checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
@@ -500,7 +561,7 @@ def train_model(
                 enabled=device.type == "cuda",
             ):
                 logits = model(input_image)
-                loss = binary_loss(logits, target)
+                loss = binary_loss(logits, target, cldice_weight=cldice_weight)
             scaler.scale(loss / accumulation).backward()
             if step % accumulation == 0 or step == len(loader):
                 scaler.unscale_(optimizer)
@@ -536,6 +597,9 @@ def train_model(
                 "epochs": epochs,
                 "batch_size": batch_size,
                 "accumulation": accumulation,
+                "cldice_weight": cldice_weight,
+                "cldice_patch_size": CLDICE_PATCH_SIZE,
+                "cldice_iterations": CLDICE_ITERATIONS,
             },
         }
         torch.save(checkpoint, checkpoint_path)
@@ -775,6 +839,7 @@ def run_oof(args: argparse.Namespace, dataset: CompetitionDataset, split: Any, d
             if (
                 completion.get("validation_names") != validation_names
                 or completion.get("snapshot_epochs") != list(candidate_epochs)
+                or float(completion.get("cldice_weight", 0.0)) != args.cldice_weight
             ):
                 raise RuntimeError(f"Fold {fold} completion manifest does not match current folds")
             completed_folds.append(completion)
@@ -793,6 +858,7 @@ def run_oof(args: argparse.Namespace, dataset: CompetitionDataset, split: Any, d
             device=device,
             checkpoint_path=checkpoint_path,
             fold_label=str(fold),
+            cldice_weight=args.cldice_weight,
         )
         for epoch in candidate_epochs:
             snapshot_path = epoch_checkpoint_path(checkpoint_path, epoch)
@@ -827,6 +893,7 @@ def run_oof(args: argparse.Namespace, dataset: CompetitionDataset, split: Any, d
             "validation_names": validation_names,
             "training": training,
             "snapshot_epochs": list(candidate_epochs),
+            "cldice_weight": args.cldice_weight,
             "snapshot_paths": training["snapshot_paths"],
             "oof_prediction_files": {
                 str(epoch): str(path.relative_to(REPO_ROOT))
@@ -913,7 +980,7 @@ def run_oof(args: argparse.Namespace, dataset: CompetitionDataset, split: Any, d
         "script_sha256": sha256(Path(__file__).resolve()),
     }
     (output_dir / "oof-summary.json").write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    print(json.dumps({"event": "oof_complete", "selected": best, "runtime_seconds": result["runtime_seconds"]}, flush=True), flush=True)
+    print(json.dumps({"event": "oof_complete", "selected": best, "runtime_seconds": result["runtime_seconds"]}), flush=True)
     return result
 
 
@@ -927,7 +994,11 @@ def run_holdout(args: argparse.Namespace, dataset: CompetitionDataset, split: An
     if not oof_metadata_path.is_file():
         raise FileNotFoundError("OOF run metadata is missing")
     oof_config = json.loads(oof_metadata_path.read_text(encoding="utf-8"))["config"]
-    if oof_config["epochs"] != args.epochs or oof_config["tta_views"] != args.tta_views:
+    if (
+        oof_config["epochs"] != args.epochs
+        or oof_config["tta_views"] != args.tta_views
+        or float(oof_config.get("cldice_weight", 0.0)) != args.cldice_weight
+    ):
         raise RuntimeError("Holdout configuration must match the OOF-selected training and TTA settings")
     selected = oof_summary["selected_oof_parameters"]
     training_names = list(split.training_names)
@@ -948,6 +1019,7 @@ def run_holdout(args: argparse.Namespace, dataset: CompetitionDataset, split: An
         device=device,
         checkpoint_path=checkpoint_path,
         fold_label="full",
+        cldice_weight=args.cldice_weight,
     )
     selected_epoch = int(selected["epoch"])
     selected_checkpoint = epoch_checkpoint_path(checkpoint_path, selected_epoch)
@@ -1011,7 +1083,7 @@ def run_holdout(args: argparse.Namespace, dataset: CompetitionDataset, split: An
         "script_sha256": sha256(Path(__file__).resolve()),
     }
     metrics_path.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    print(json.dumps({"event": "holdout_complete", "global": metrics["global"]}, flush=True), flush=True)
+    print(json.dumps({"event": "holdout_complete", "global": metrics["global"]}), flush=True)
     return result
 
 
@@ -1022,13 +1094,14 @@ def main() -> int:
     parser.add_argument("--split-dir", type=Path, default=REPO_ROOT / "data" / "splits")
     parser.add_argument("--output-dir", type=Path, default=REPO_ROOT / "artifacts" / "model-experiments" / "native-unet-grouped-20261111")
     parser.add_argument("--epochs", type=int, default=EPOCHS_DEFAULT)
+    parser.add_argument("--cldice-weight", type=float, default=0.0)
     parser.add_argument("--batch-size", type=int, choices=(1,), default=1)
     parser.add_argument("--workers", type=int, default=0)
     parser.add_argument("--tta-views", type=int, choices=(1, 2, 4, 8), default=TTA_DEFAULT)
     parser.add_argument("--device", default="cuda:0" if torch.cuda.is_available() else "cpu")
     args = parser.parse_args()
-    if args.epochs < 1 or args.workers < 0:
-        parser.error("--epochs must be positive and --workers nonnegative")
+    if args.epochs < 1 or args.workers < 0 or not 0.0 <= args.cldice_weight <= 1.0:
+        parser.error("--epochs must be positive, --workers nonnegative, and --cldice-weight in [0, 1]")
     data_root = args.data_root.expanduser().resolve()
     split_dir = args.split_dir.expanduser().resolve()
     output_dir = args.output_dir.expanduser().resolve()
@@ -1064,6 +1137,9 @@ def main() -> int:
             "batch_size": args.batch_size,
             "workers": args.workers,
             "tta_views": args.tta_views,
+            "cldice_weight": args.cldice_weight,
+            "cldice_patch_size": CLDICE_PATCH_SIZE,
+            "cldice_iterations": CLDICE_ITERATIONS,
             "encoder": ENCODER_NAME,
             "crop_size": CROP_SIZE,
             "crop_offset": CROP_OFFSET,

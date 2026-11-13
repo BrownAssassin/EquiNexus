@@ -3,9 +3,9 @@
 
 """Train and evaluate a high-resolution, semantic U-Net with GONG auxiliary targets.
 
-The segmentation head uses competition annotations only. Auxiliary heads predict
-public GONG magnetogram-derived proxies for frozen training observations; those
-targets are not used for holdout scoring or test-time inference.
+The segmentation head learns from competition filament masks. An auxiliary head
+predicts public GONG magnetogram-derived proxies for frozen training observations;
+those targets are not used for holdout scoring or test-time inference.
 """
 
 from __future__ import annotations
@@ -25,9 +25,9 @@ from pathlib import Path
 from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-os.environ.setdefault("TORCH_HOME", str(REPO_ROOT / ".cache" / "torch"))
-os.environ.setdefault("HF_HOME", str(REPO_ROOT / ".cache" / "huggingface"))
-os.environ.setdefault("MPLCONFIGDIR", str(REPO_ROOT / ".cache" / "matplotlib"))
+from workspace_runtime import configure_workspace_runtime
+
+configure_workspace_runtime(REPO_ROOT)
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
 import cv2
@@ -42,8 +42,10 @@ from sklearn.model_selection import StratifiedKFold
 from torch.utils.data import DataLoader, Dataset
 
 from filament_baseline.data import CompetitionDataset, load_dataset
+from filament_baseline.external_data import audit_external_target_ids
 from filament_baseline.predictor import PredictedInstance, encode_label_components
 from filament_baseline.runtime import git_info, hardware_info, package_versions
+from filament_baseline.runner import _write_predictions
 from filament_baseline.scorer import annotation_to_rle, score_validation
 from filament_baseline.split import create_observation_split
 
@@ -52,6 +54,7 @@ EXPECTED_SPLIT_SHA256 = "30cb2ec52437daf97e769a3a61bf83350062e6cf4f5d00af1f83996
 FULL_SIZE = 2048
 CROP_SIZE = 1888
 CROP_OFFSET = (FULL_SIZE - CROP_SIZE) // 2
+TRAIN_PATCH_SIZE = 1024
 NORM_RADIUS = 900
 GONG_SIZE = 512
 AUX_SIZE = CROP_SIZE // 4
@@ -136,6 +139,9 @@ def load_gong_manifest(
     gong_root: Path,
     training_names: list[str],
     validation_names: list[str],
+    test_names: list[str],
+    *,
+    allow_training_superset: bool = False,
 ) -> tuple[dict[str, Any], dict[str, Path], str]:
     manifest_path = gong_root / "train-only-manifest.json"
     if not manifest_path.is_file():
@@ -147,12 +153,31 @@ def load_gong_manifest(
         raise RuntimeError("GONG manifest refers to an unexpected dataset")
     if manifest.get("split_sha256") != EXPECTED_SPLIT_SHA256:
         raise RuntimeError("GONG target manifest uses a different frozen split")
-    if manifest.get("training_observation_names") != sorted(training_names):
-        raise RuntimeError("GONG target manifest training observations differ from the frozen training partition")
+    manifest_training_names = set(manifest.get("training_observation_names", []))
+    requested_training_names = set(training_names)
+    if manifest_training_names != requested_training_names and not (
+        allow_training_superset and manifest_training_names.issubset(requested_training_names)
+    ):
+        raise RuntimeError("GONG target manifest training observations differ from the requested training population")
     if manifest.get("validation_target_files_downloaded") != 0:
         raise RuntimeError("GONG target manifest reports a holdout target download")
     if manifest.get("partition") != "frozen training observations only":
         raise RuntimeError("GONG target manifest does not declare training-only use")
+    temporal_audit = manifest.get("external_temporal_audit")
+    if not isinstance(temporal_audit, dict):
+        raise RuntimeError("GONG target manifest has no organizer-aligned temporal exclusion audit")
+    expected_temporal_audit = audit_external_target_ids(
+        candidate_ids=temporal_audit.get("candidate_target_ids", []),
+        training_ids=manifest_training_names,
+        validation_ids=validation_names,
+        test_ids=test_names,
+    )
+    if temporal_audit != expected_temporal_audit:
+        raise RuntimeError("GONG temporal exclusion audit differs from the frozen data partitions")
+    eligible_target_ids = set(expected_temporal_audit["eligible_training_target_ids"])
+    selected_target_ids = set(manifest.get("selected_target_ids", []))
+    if not selected_target_ids or not selected_target_ids.issubset(eligible_target_ids):
+        raise RuntimeError("Selected GONG targets include a prohibited date or timestamp")
     downloaded = manifest.get("downloaded_files")
     if not isinstance(downloaded, list) or not downloaded:
         raise RuntimeError("GONG target manifest has no downloaded training target files")
@@ -168,6 +193,8 @@ def load_gong_manifest(
         observation_name = relative.stem + ".jpeg"
         if observation_name not in training_set or observation_name in validation_set:
             raise RuntimeError(f"Non-training observation entered GONG targets: {observation_name}")
+        if relative.stem not in selected_target_ids:
+            raise RuntimeError(f"Unselected GONG target entered the download manifest: {name}")
         path = gong_root / relative
         if not path.is_file() or path.stat().st_size != int(row["bytes"]):
             raise RuntimeError(f"GONG target file is missing or changed: {path}")
@@ -176,6 +203,8 @@ def load_gong_manifest(
         target_paths[observation_name] = path
     if len(target_paths) != len(downloaded):
         raise RuntimeError("GONG target manifest contains duplicate observations")
+    if set(target_paths) != {f"{name}.jpeg" for name in selected_target_ids}:
+        raise RuntimeError("Downloaded GONG targets do not match the audited selection")
     return manifest, target_paths, sha256(manifest_path)
 
 
@@ -185,11 +214,17 @@ def build_training_cache(
     output_dir: Path,
     gong_root: Path,
     validation_names: list[str],
+    *,
+    allow_gong_training_superset: bool = False,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     image_path, mask_path, stats_path, index_path, auxiliary_path = cache_paths(output_dir)
     expected_names = sorted(names)
     gong_manifest, gong_target_paths, gong_manifest_sha256 = load_gong_manifest(
-        gong_root, expected_names, validation_names
+        gong_root,
+        expected_names,
+        validation_names,
+        [path.stem for path in dataset.test_image_dir.glob("*.jpeg") if path.is_file()],
+        allow_training_superset=allow_gong_training_superset,
     )
     if (
         index_path.is_file()
@@ -326,6 +361,7 @@ class ObservationDataset(Dataset):
         *,
         augment: bool,
         seed: int,
+        patch_size: int | None = None,
     ) -> None:
         self.images = images
         self.masks = masks
@@ -333,6 +369,9 @@ class ObservationDataset(Dataset):
         self.auxiliary = auxiliary
         self.indices = indices
         self.augment = augment
+        if patch_size is not None and (patch_size > CROP_SIZE or patch_size % 32 != 0):
+            raise ValueError(f"Training patch size must be <= {CROP_SIZE} and divisible by 32")
+        self.patch_size = patch_size
         self.rng = np.random.default_rng(seed)
 
     def __len__(self) -> int:
@@ -340,9 +379,9 @@ class ObservationDataset(Dataset):
 
     def __getitem__(self, item: int) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         index = self.indices[item]
-        image = np.array(self.images[index], copy=True)
-        mask = np.array(self.masks[index], copy=True)
-        auxiliary = np.array(self.auxiliary[index], copy=True)
+        image = self.images[index]
+        mask = self.masks[index]
+        auxiliary = self.auxiliary[index]
         if self.augment:
             k = int(self.rng.integers(0, 4))
             image = np.rot90(image, k)
@@ -356,6 +395,26 @@ class ObservationDataset(Dataset):
                 image = image[::-1, :]
                 mask = mask[::-1, :]
                 auxiliary = auxiliary[:, ::-1, :]
+
+        if self.patch_size is not None:
+            patch_size = self.patch_size
+            max_top = image.shape[0] - patch_size
+            max_left = image.shape[1] - patch_size
+            top = int(self.rng.integers(0, max_top // 4 + 1)) * 4
+            left = int(self.rng.integers(0, max_left // 4 + 1)) * 4
+            auxiliary_top = top // 4
+            auxiliary_left = left // 4
+            auxiliary_patch_size = patch_size // 4
+            image = image[top : top + patch_size, left : left + patch_size]
+            mask = mask[top : top + patch_size, left : left + patch_size]
+            auxiliary = auxiliary[
+                :,
+                auxiliary_top : auxiliary_top + auxiliary_patch_size,
+                auxiliary_left : auxiliary_left + auxiliary_patch_size,
+            ]
+        image = np.array(image, copy=True)
+        mask = np.array(mask, copy=True)
+        auxiliary = np.array(auxiliary, copy=True)
 
         centre, scale = (float(value) for value in self.stats[index])
         image_float = image.astype(np.float32)
@@ -559,6 +618,7 @@ def train_model(
             and saved.get("training_observations") == ordered_names
             and saved_config.get("encoder") == ENCODER_NAME
             and int(saved_config.get("crop_size", -1)) == CROP_SIZE
+            and int(saved_config.get("training_patch_size", -1)) == TRAIN_PATCH_SIZE
             and int(saved_config.get("epochs", -1)) == epochs
             and int(saved_config.get("batch_size", -1)) == batch_size
             and saved_config.get("gong_manifest_sha256") == gong_manifest_sha256
@@ -592,6 +652,7 @@ def train_model(
         train_indices,
         augment=True,
         seed=SEED + (int(fold_label) if fold_label.isdigit() else 1000),
+        patch_size=TRAIN_PATCH_SIZE,
     )
     loader = DataLoader(
         dataset,
@@ -685,6 +746,7 @@ def train_model(
             "config": {
                 "encoder": ENCODER_NAME,
                 "crop_size": CROP_SIZE,
+                "training_patch_size": TRAIN_PATCH_SIZE,
                 "epochs": epochs,
                 "batch_size": batch_size,
                 "accumulation": accumulation,
@@ -699,6 +761,7 @@ def train_model(
         print(json.dumps({"event": "epoch", "fold": fold_label, **epoch_row}), flush=True)
     runtime = {
         "training_seconds": round(time.perf_counter() - started, 3),
+        "training_patch_size": TRAIN_PATCH_SIZE,
         "history": history,
         "checkpoint": str(checkpoint_path.resolve().relative_to(REPO_ROOT)),
         "checkpoint_sha256": sha256(checkpoint_path),
@@ -757,6 +820,7 @@ def predict_observations(
     *,
     device: torch.device,
     tta_views: int,
+    image_dir: Path | None = None,
 ) -> dict[str, np.ndarray]:
     model.eval()
     cache_index = {name: index for index, name in enumerate(cache_names or [])}
@@ -767,9 +831,10 @@ def predict_observations(
             image_crop = np.asarray(images[cache_index[file_name]])
             image_stats = tuple(float(value) for value in stats[cache_index[file_name]])
         else:
-            full = cv2.imread(str(dataset.train_image_dir / file_name), cv2.IMREAD_GRAYSCALE)
+            source_dir = image_dir or dataset.train_image_dir
+            full = cv2.imread(str(source_dir / file_name), cv2.IMREAD_GRAYSCALE)
             if full is None or full.shape != (FULL_SIZE, FULL_SIZE):
-                raise ValueError(f"Could not decode validation image: {file_name}")
+                raise ValueError(f"Could not decode input image: {source_dir / file_name}")
             image_crop = centre_crop(full)
             image_stats = intensity_stats(image_crop)
         output[file_name] = predict_crop(
@@ -887,6 +952,63 @@ def create_oof_fold_map(dataset: CompetitionDataset, training_names: list[str], 
     return assignments
 
 
+def gong_postprocess_grid(
+    native_summary_path: Path, split_sha256: str, candidate_epochs: list[int]
+) -> tuple[list[tuple[float, int, int]], dict[str, Any]]:
+    if not native_summary_path.is_file():
+        raise FileNotFoundError(f"Native OOF summary is required to center the GONG sweep: {native_summary_path}")
+    native_summary = json.loads(native_summary_path.read_text(encoding="utf-8"))
+    if native_summary.get("split_sha256") != split_sha256:
+        raise RuntimeError("Native OOF summary uses a different frozen split")
+    native_selected = native_summary.get("selected_oof_parameters")
+    if not isinstance(native_selected, dict):
+        raise RuntimeError("Native OOF summary has no selected postprocessing parameters")
+
+    threshold_axis = (0.30, 0.35, 0.40, 0.45, 0.50, 0.55, 0.60, 0.65, 0.70)
+    min_area_axis = (50, 150, 250, 400)
+    closing_axis = (0, 5, 9)
+
+    def nearest_axis_index(axis: tuple[float, ...] | tuple[int, ...], key: str) -> int:
+        if key not in native_selected:
+            raise RuntimeError(f"Native OOF parameters are missing {key!r}")
+        value = float(native_selected[key])
+        return min(range(len(axis)), key=lambda index: abs(float(axis[index]) - value))
+
+    threshold_center = nearest_axis_index(threshold_axis, "threshold")
+    area_center = nearest_axis_index(min_area_axis, "min_area")
+    closing_center = nearest_axis_index(closing_axis, "closing_kernel")
+    center_threshold = threshold_axis[threshold_center]
+    threshold_values = tuple(
+        round(center_threshold + offset, 2)
+        for offset in (-0.10, -0.05, 0.00, 0.05, 0.10)
+        if 0.30 <= center_threshold + offset <= 0.70
+    )
+    min_area_values = min_area_axis[max(0, area_center - 1) : min(len(min_area_axis), area_center + 2)]
+    closing_values = closing_axis[max(0, closing_center - 1) : min(len(closing_axis), closing_center + 2)]
+    grid = [
+        (threshold, min_area, closing)
+        for threshold in threshold_values
+        for min_area in min_area_values
+        for closing in closing_values
+    ]
+    if len(grid) != len(set(grid)) or not grid:
+        raise AssertionError("GONG neighborhood postprocessing grid must contain unique settings")
+    sweep_definition = {
+        "strategy": "native OOF selected configuration plus local neighborhood",
+        "native_oof_summary": str(native_summary_path.relative_to(REPO_ROOT)).replace("\\", "/"),
+        "native_oof_summary_sha256": sha256(native_summary_path),
+        "native_selected_parameters": native_selected,
+        "native_split_sha256": native_summary["split_sha256"],
+        "threshold_values": list(threshold_values),
+        "min_area_values": list(min_area_values),
+        "closing_kernel_values": list(closing_values),
+        "settings_per_epoch": len(grid),
+        "candidate_epochs": list(candidate_epochs),
+        "total_settings": len(grid) * len(candidate_epochs),
+    }
+    return grid, sweep_definition
+
+
 def run_oof(args: argparse.Namespace, dataset: CompetitionDataset, split: Any, device: torch.device) -> dict[str, Any]:
     output_dir = args.output_dir
     training_names = list(split.training_names)
@@ -934,6 +1056,7 @@ def run_oof(args: argparse.Namespace, dataset: CompetitionDataset, split: Any, d
             if (
                 completion.get("validation_names") != validation_names
                 or completion.get("snapshot_epochs") != list(candidate_epochs)
+                or completion.get("training_patch_size") != TRAIN_PATCH_SIZE
             ):
                 raise RuntimeError(f"Fold {fold} completion manifest does not match current folds")
             completed_folds.append(completion)
@@ -988,6 +1111,7 @@ def run_oof(args: argparse.Namespace, dataset: CompetitionDataset, split: Any, d
             "validation_names": validation_names,
             "training": training,
             "snapshot_epochs": list(candidate_epochs),
+            "training_patch_size": TRAIN_PATCH_SIZE,
             "snapshot_paths": training["snapshot_paths"],
             "oof_prediction_files": {
                 str(epoch): str(path.relative_to(REPO_ROOT))
@@ -1004,12 +1128,10 @@ def run_oof(args: argparse.Namespace, dataset: CompetitionDataset, split: Any, d
         probability_map.flush()
     if len(completed_folds) != 5:
         raise RuntimeError(f"Only {len(completed_folds)} of five OOF folds completed")
-    grid = [
-        (threshold, min_area, closing)
-        for threshold in (0.30, 0.35, 0.40, 0.45, 0.50, 0.55, 0.60, 0.65, 0.70)
-        for min_area in (50, 150, 250, 400)
-        for closing in (0, 5, 9)
-    ]
+    native_summary_path = (
+        REPO_ROOT / "artifacts" / "model-experiments" / "native-unet-grouped-20261111" / "oof-summary.json"
+    )
+    grid, sweep_definition = gong_postprocess_grid(native_summary_path, split.sha256, candidate_epochs)
     sweep_rows: list[dict[str, Any]] = []
     best: dict[str, Any] | None = None
     total_settings = len(grid) * len(candidate_epochs)
@@ -1071,6 +1193,8 @@ def run_oof(args: argparse.Namespace, dataset: CompetitionDataset, split: Any, d
         "gong_auxiliary_weight": GONG_AUXILIARY_WEIGHT,
         "holdout_gong_targets_downloaded": 0,
         "selected_oof_parameters": best,
+        "training_patch_size": TRAIN_PATCH_SIZE,
+        "postprocess_sweep": sweep_definition,
         "candidate_epochs": list(candidate_epochs),
         "sweep_rows": total_settings,
         "runtime_seconds": round(time.perf_counter() - started, 3),
@@ -1081,7 +1205,7 @@ def run_oof(args: argparse.Namespace, dataset: CompetitionDataset, split: Any, d
         "script_sha256": sha256(Path(__file__).resolve()),
     }
     (output_dir / "oof-summary.json").write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    print(json.dumps({"event": "oof_complete", "selected": best, "runtime_seconds": result["runtime_seconds"]}, flush=True), flush=True)
+    print(json.dumps({"event": "oof_complete", "selected": best, "runtime_seconds": result["runtime_seconds"]}), flush=True)
     return result
 
 
@@ -1095,7 +1219,11 @@ def run_holdout(args: argparse.Namespace, dataset: CompetitionDataset, split: An
     if not oof_metadata_path.is_file():
         raise FileNotFoundError("OOF run metadata is missing")
     oof_config = json.loads(oof_metadata_path.read_text(encoding="utf-8"))["config"]
-    if oof_config["epochs"] != args.epochs or oof_config["tta_views"] != args.tta_views:
+    if (
+        oof_config["epochs"] != args.epochs
+        or oof_config["tta_views"] != args.tta_views
+        or oof_config.get("training_patch_size") != TRAIN_PATCH_SIZE
+    ):
         raise RuntimeError("Holdout configuration must match the OOF-selected training and TTA settings")
     if oof_config.get("split_sha256") != split.sha256:
         raise RuntimeError("Holdout split differs from the OOF-selected split")
@@ -1196,13 +1324,196 @@ def run_holdout(args: argparse.Namespace, dataset: CompetitionDataset, split: An
         "script_sha256": sha256(Path(__file__).resolve()),
     }
     metrics_path.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    print(json.dumps({"event": "holdout_complete", "global": metrics["global"]}, flush=True), flush=True)
+    print(json.dumps({"event": "holdout_complete", "global": metrics["global"]}), flush=True)
+    return result
+
+
+def run_final_submission(
+    args: argparse.Namespace,
+    dataset: CompetitionDataset,
+    split: Any,
+    device: torch.device,
+) -> dict[str, Any]:
+    """Fit the selected candidate on all competition training observations and predict supplied test images."""
+    oof_summary_path = args.output_dir / "oof-summary.json"
+    oof_metadata_path = args.output_dir / "run-metadata-oof.json"
+    holdout_metrics_path = args.output_dir / "holdout-metrics.json"
+    oof_comparison_path = args.output_dir / "oof-comparison-vs-native.json"
+    holdout_comparison_path = args.output_dir / "holdout-comparison-vs-native.json"
+    if not all(
+        path.is_file()
+        for path in (
+            oof_summary_path,
+            oof_metadata_path,
+            holdout_metrics_path,
+            oof_comparison_path,
+            holdout_comparison_path,
+        )
+    ):
+        raise FileNotFoundError("Final fit requires complete paired OOF and independent holdout comparisons")
+    oof_summary = json.loads(oof_summary_path.read_text(encoding="utf-8"))
+    oof_config = json.loads(oof_metadata_path.read_text(encoding="utf-8"))["config"]
+    holdout_result = json.loads(holdout_metrics_path.read_text(encoding="utf-8"))
+    oof_comparison = json.loads(oof_comparison_path.read_text(encoding="utf-8"))
+    holdout_comparison = json.loads(holdout_comparison_path.read_text(encoding="utf-8"))
+    if oof_summary.get("split_sha256") != split.sha256 or holdout_result.get("split_sha256") != split.sha256:
+        raise RuntimeError("Final fit evidence does not use the frozen observation split")
+    if (
+        oof_comparison.get("split_sha256") != split.sha256
+        or holdout_comparison.get("split_sha256") != split.sha256
+        or oof_comparison.get("test_data_used") is not False
+        or holdout_comparison.get("test_data_used") is not False
+    ):
+        raise RuntimeError("Paired model comparisons do not preserve the frozen split and test-label boundary")
+    baseline_oof_pq = float(oof_comparison["baseline"]["global_metrics"]["pq"])
+    candidate_oof_pq = float(oof_comparison["gong_auxiliary"]["global_metrics"]["pq"])
+    baseline_holdout_pq = float(holdout_comparison["baseline"]["global_metrics"]["pq"])
+    candidate_holdout_pq = float(holdout_comparison["gong_auxiliary"]["global_metrics"]["pq"])
+    if candidate_oof_pq <= baseline_oof_pq or candidate_holdout_pq <= baseline_holdout_pq:
+        raise RuntimeError("Final fit promotion requires strict PQ improvement on both grouped OOF and frozen holdout")
+    if (
+        oof_config.get("epochs") != args.epochs
+        or oof_config.get("tta_views") != args.tta_views
+        or oof_config.get("training_patch_size") != TRAIN_PATCH_SIZE
+    ):
+        raise RuntimeError("Final fit settings differ from the OOF-selected candidate")
+    gong_manifest_sha256 = sha256(args.gong_data_root / "train-only-manifest.json")
+    if oof_config.get("gong_target_manifest_sha256") != gong_manifest_sha256:
+        raise RuntimeError("Final fit GONG targets differ from the OOF-selected candidate")
+    if holdout_result.get("gong_target_manifest_sha256") != gong_manifest_sha256:
+        raise RuntimeError("Final fit GONG targets differ from the holdout-evaluated candidate")
+    selected = oof_summary.get("selected_oof_parameters")
+    if not isinstance(selected, dict) or not selected:
+        raise RuntimeError("OOF run has no selected post-processing configuration")
+    if not math.isclose(float(selected["pq"]), candidate_oof_pq, rel_tol=0.0, abs_tol=1e-12):
+        raise RuntimeError("Paired OOF comparison differs from the selected GONG-auxiliary OOF result")
+    holdout_pq = float(holdout_result["official_scorer_metrics"]["global"]["pq"])
+    if not math.isclose(holdout_pq, candidate_holdout_pq, rel_tol=0.0, abs_tol=1e-12):
+        raise RuntimeError("Paired holdout comparison differs from the selected GONG-auxiliary holdout result")
+    selected_epoch = int(selected["epoch"])
+    submission_dir = REPO_ROOT / "artifacts" / "submissions" / f"{args.output_dir.name}-final"
+    submission_path = submission_dir / "submission.csv"
+    validation_path = submission_dir / "rle-validation.json"
+    result_path = submission_dir / "final-submission-run.json"
+    if any(path.exists() for path in (submission_path, validation_path, result_path)):
+        raise FileExistsError(f"Final submission output already exists under {submission_dir}")
+    training_names = list(dataset.observation_names)
+    if len(training_names) != 707 or set(training_names) != set(dataset.views_by_observation):
+        raise RuntimeError("Final fit must use all 707 competition-provided training observations")
+
+    final_fit_dir = args.output_dir / "final-all-707"
+    images, masks, stats, auxiliary = build_training_cache(
+        dataset,
+        training_names,
+        final_fit_dir,
+        args.gong_data_root,
+        list(split.validation_names),
+        allow_gong_training_superset=True,
+    )
+    cache_names = json.loads(cache_paths(final_fit_dir)[3].read_text(encoding="utf-8"))["names"]
+    if cache_names != sorted(training_names):
+        raise RuntimeError("Final training cache does not cover all competition training observations")
+    checkpoint_path = final_fit_dir / "last-checkpoint.pt"
+    model, training = train_model(
+        images,
+        masks,
+        stats,
+        auxiliary,
+        cache_names,
+        list(range(len(cache_names))),
+        epochs=args.epochs,
+        batch_size=args.batch_size,
+        workers=args.workers,
+        device=device,
+        checkpoint_path=checkpoint_path,
+        gong_manifest_sha256=gong_manifest_sha256,
+        fold_label="final",
+    )
+    selected_checkpoint = epoch_checkpoint_path(checkpoint_path, selected_epoch)
+    if not selected_checkpoint.is_file():
+        raise FileNotFoundError(f"Missing final-fit checkpoint for selected OOF epoch {selected_epoch}: {selected_checkpoint}")
+    selected_state = torch.load(selected_checkpoint, map_location="cpu", weights_only=True)
+    model.load_state_dict(selected_state["state_dict"], strict=True)
+
+    test_names = sorted(path.name for path in dataset.test_image_dir.glob("*.jpeg"))
+    if len(test_names) != 180 or len({Path(name).stem for name in test_names}) != 180:
+        raise RuntimeError(f"Expected 180 unique supplied H-alpha test images, found {len(test_names)}")
+    probabilities = predict_observations(
+        model,
+        dataset,
+        test_names,
+        None,
+        None,
+        cache_names,
+        device=device,
+        tta_views=args.tta_views,
+        image_dir=dataset.test_image_dir,
+    )
+    predictions = predictions_for_config(
+        probabilities,
+        test_names,
+        threshold=float(selected["threshold"]),
+        min_area=int(selected["min_area"]),
+        closing_kernel=int(selected["closing_kernel"]),
+    )
+
+    submission_dir.mkdir(parents=True, exist_ok=True)
+    _write_predictions(submission_path, predictions)
+    validator_path = REPO_ROOT / "scripts" / "validate_submission_rles.py"
+    subprocess.run(
+        [
+            sys.executable,
+            str(validator_path),
+            str(submission_path),
+            "--test-image-dir",
+            str(dataset.test_image_dir),
+            "--expected-test-images",
+            "180",
+            "--output-json",
+            str(validation_path),
+        ],
+        cwd=REPO_ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    validation = json.loads(validation_path.read_text(encoding="utf-8"))
+    result = {
+        "split_sha256": split.sha256,
+        "partition": "final fit on all competition-provided training observations after frozen OOF and holdout selection",
+        "training_observations": len(training_names),
+        "training_annotator_views": sum(len(dataset.views_by_observation[name]) for name in training_names),
+        "frozen_holdout_labels_used_only_after_candidate_selection": True,
+        "gong_target_manifest_sha256": gong_manifest_sha256,
+        "gong_target_files_used": int(json.loads(cache_paths(final_fit_dir)[3].read_text(encoding="utf-8"))["gong_target_files"]),
+        "selected_oof_parameters": selected,
+        "model_epoch_selected_from_oof": selected_epoch,
+        "native_baseline_oof_pq": baseline_oof_pq,
+        "gong_auxiliary_candidate_oof_pq": candidate_oof_pq,
+        "native_baseline_holdout_pq": baseline_holdout_pq,
+        "gong_auxiliary_candidate_holdout_pq": candidate_holdout_pq,
+        "selected_checkpoint": str(selected_checkpoint.relative_to(REPO_ROOT)),
+        "test_images": len(test_names),
+        "test_labels_read": False,
+        "submission_path": str(submission_path.relative_to(REPO_ROOT)).replace("\\", "/"),
+        "submission_sha256": sha256(submission_path),
+        "rle_validation": validation,
+        "training": training,
+        "tta_views": args.tta_views,
+        "device": capture_device(device),
+        "package_versions": {**package_versions(), "timm": importlib.metadata.version("timm")},
+        "source": git_info(REPO_ROOT),
+        "source_commit": git_commit(),
+        "script_sha256": sha256(Path(__file__).resolve()),
+    }
+    result_path.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    print(json.dumps({"event": "final_submission_complete", "submission": result["submission_path"], "rows": validation["rows"]}), flush=True)
     return result
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--mode", choices=("oof", "holdout"), required=True)
+    parser.add_argument("--mode", choices=("oof", "holdout", "final"), required=True)
     parser.add_argument("--data-root", type=Path, default=REPO_ROOT / "data" / "raw" / "MAGFiLO_1.0_Kaggle_2026")
     parser.add_argument("--split-dir", type=Path, default=REPO_ROOT / "data" / "splits")
     parser.add_argument("--gong-data-root", type=Path, default=GONG_ROOT_DEFAULT)
@@ -1246,7 +1557,10 @@ def main() -> int:
     cv2.setNumThreads(0)
     dataset, split = load_dataset_split(data_root, split_dir)
     gong_manifest, gong_target_paths, gong_manifest_sha256 = load_gong_manifest(
-        gong_data_root, list(split.training_names), list(split.validation_names)
+        gong_data_root,
+        list(split.training_names),
+        list(split.validation_names),
+        [path.stem for path in dataset.test_image_dir.glob("*.jpeg") if path.is_file()],
     )
     output_dir.mkdir(parents=True, exist_ok=True)
     run_metadata = {
@@ -1259,6 +1573,7 @@ def main() -> int:
             "tta_views": args.tta_views,
             "encoder": ENCODER_NAME,
             "crop_size": CROP_SIZE,
+            "training_patch_size": TRAIN_PATCH_SIZE,
             "crop_offset": CROP_OFFSET,
             "seed": SEED,
             "split_sha256": split.sha256,
@@ -1268,11 +1583,18 @@ def main() -> int:
             "gong_target_manifest_sha256": gong_manifest_sha256,
             "gong_targets_available_for_training": len(gong_target_paths),
             "gong_holdout_target_files_downloaded": 0,
+            "fit_scope": "all 707 competition training observations after model selection" if args.mode == "final" else "frozen 565-observation training partition",
         },
         "dataset": {
             "root": str(dataset.root.relative_to(REPO_ROOT)) if dataset.root.is_relative_to(REPO_ROOT) else str(dataset.root),
             "training_observations": len(split.training_names),
             "holdout_observations": len(split.validation_names),
+            "model_fit_observations": len(dataset.observation_names) if args.mode == "final" else len(split.training_names),
+            "model_fit_annotator_views": sum(
+                len(dataset.views_by_observation[name])
+                for name in (dataset.observation_names if args.mode == "final" else split.training_names)
+            ),
+            "frozen_holdout_labels_used_in_final_fit": args.mode == "final",
             "training_annotator_views": sum(len(dataset.views_by_observation[name]) for name in split.training_names),
             "holdout_annotator_views": sum(len(dataset.views_by_observation[name]) for name in split.validation_names),
             "gong_training_targets": len(gong_target_paths),
@@ -1297,8 +1619,10 @@ def main() -> int:
 
     if args.mode == "oof":
         run_oof(args, dataset, split, device)
-    else:
+    elif args.mode == "holdout":
         run_holdout(args, dataset, split, device)
+    else:
+        run_final_submission(args, dataset, split, device)
     return 0
 
 

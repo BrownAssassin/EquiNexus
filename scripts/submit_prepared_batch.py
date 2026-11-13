@@ -84,6 +84,33 @@ def validate_candidate(candidate: dict[str, Any]) -> Path:
     return path
 
 
+def verify_daily_submission_quota(batch_size: int, log_path: Path | None) -> None:
+    """Fail closed unless Kaggle currently permits the whole batch."""
+    from kaggle.api.kaggle_api_extended import KaggleApi
+
+    api = KaggleApi()
+    api.authenticate()
+    limits = api.competition_get_submission_limits(COMPETITION)
+    allowed = int(limits.num_allowed_now)
+    emit(
+        {
+            "event": "submission_quota_preflight",
+            "num_today": int(limits.num_today),
+            "num_total": int(limits.num_total),
+            "num_allowed_now": allowed,
+            "limited_by_total": bool(limits.limited_by_total),
+            "batch_size": batch_size,
+            "utc": datetime.now(timezone.utc).isoformat(),
+        },
+        log_path,
+    )
+    if allowed < batch_size:
+        raise RuntimeError(
+            f"Kaggle currently permits {allowed} more submissions, but this batch has {batch_size}; "
+            "refusing to start a partial batch."
+        )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--manifest", type=Path, required=True)
@@ -119,8 +146,24 @@ def main() -> int:
     if args.submit:
         if git_output("branch", "--show-current") != "main":
             raise ValueError("submission requires the committed main branch")
-        if git_output("status", "--porcelain"):
-            raise ValueError("submission requires a clean worktree")
+        status_rows = git_output(
+            "status", "--porcelain=v1", "--untracked-files=all"
+        ).splitlines()
+        allowed_documentation = {
+            "docs/experiment-log.md",
+            "docs/model-sprint.md",
+        }
+        unexpected_changes = []
+        for row in status_rows:
+            path = row[3:].strip().strip('"').replace("\\", "/")
+            if row[:2] != " M" or path not in allowed_documentation:
+                unexpected_changes.append(path or row)
+        if unexpected_changes:
+            raise ValueError(
+                "submission requires pushed code to remain unchanged; only "
+                "unstaged edits to the two sprint logs may be pending, found: "
+                + ", ".join(unexpected_changes)
+            )
         remote_commit = git_output("rev-parse", "origin/main")
         if remote_commit != current_commit:
             raise ValueError("source commit has not been pushed to origin/main")
@@ -143,6 +186,9 @@ def main() -> int:
             raise ValueError(f"duplicate candidate bytes: {path}")
         seen_hashes.add(candidate["sha256"])
         resolved.append((candidate, path))
+
+    if args.submit:
+        verify_daily_submission_quota(len(resolved), args.log)
 
     mode = "submit" if args.submit else "dry-run"
     emit(
@@ -172,6 +218,8 @@ def main() -> int:
             "predicted_instances": candidate["predicted_instances"],
             "oof_pq": candidate.get("oof_pq"),
             "holdout_pq": candidate.get("holdout_pq"),
+            "crossfit_pq": candidate.get("crossfit_pq"),
+            "validation_protocol": candidate.get("validation_protocol"),
             "message": candidate["message"],
         }
         if not args.submit:
