@@ -2611,3 +2611,46 @@ All five submissions completed. Their public scores are 0.32, 0.32, 0.31, 0.31, 
 
 - The current Kaggle Models search also surfaced James Mills's public [CAGE Filament U-Net R4 model](https://www.kaggle.com/models/jamesmills1975/cage-filament-unet): a 24.4M-parameter 1024px ResNet-34 U-Net with mask, derived hull, and interior heads. Its model card says it trains only on competition training masks, uses CC BY-NC 4.0 weights, and reports held-out PQ 0.4022 on a random 100-entry split; some duplicate observations crossed that split, so this is not comparable to our frozen grouped protocol.
 - The Kaggle API listed the companion example notebook but denied access to its source (403). No weights were downloaded or used, and the model was not added to today's batch. Its derived-hull target is a reference for a future grouped-fold experiment; any adoption needs source-code review and evaluation on the frozen split.
+
+## 2026-11-14 00:15 UTC Dariush ten-model U-Net Kaggle crossfit diagnostic
+
+- Kaggle kernel version 2 completed using public Dariush Afshar ten-model U-Net checkpoints on an inventoried two-T4 session; inference ran on `cuda:0`. The official scorer evaluated 142 frozen-split observations across 232 annotator views: PQ 0.447800 (TP 1,099; FP 564; FN 612). Inference took 446.97 seconds, total runtime 448.63 seconds, and peak GPU allocation was 1,659,777,536 bytes.
+- This is five-fold crossfit evidence, not an independent holdout result. Each scored observation was excluded from its own predictor, but other evaluation observations appeared in other fold models' training sets. The threshold came from the upstream nested cross-validation and was not tuned on this subset. No competition test labels were used.
+- Provenance: source commit `27ece8f76d8bde0e13ebc88e42f0649b28a7f039`; frozen split SHA-256 `30cb2ec52437daf97e769a3a61bf83350062e6cf4f5d00af1f8399649065e48e`; local notebook SHA-256 `b7b44571f9176102079d4ad54453262c1460cb76f38ef0a50a13ae53f154a2ad`; runner SHA-256 `60a02f7c9476ad3456a60467d2144960e0b1e79dfc97544822d83aa99e1b64d7`; metadata SHA-256 `93156e487ea26c6c9d6e550c34c30065c83e1f88e3ca4193bee86edc29365702`.
+- Runtime: Python 3.13.16, PyTorch 2.11.0+cu130, NumPy 2.1.3, OpenCV 4.14.0.94, SciPy 1.16.3, pycocotools 2.0.11. Report, predictions, overlays, and split are under `artifacts/kaggle/runs/public-unet-fold-aware-20261113/`.
+- The runner's post-completion output transfer failed with an empty exception. A direct Kaggle CLI output download recovered the metadata and predictions; source and split hashes were verified, and the completion event above marks the recovery. No score is promoted from this crossfit diagnostic.
+
+## 2026-11-14 00:20 UTC quota-limited Kaggle submission batch
+
+- A Windows Task Scheduler submission trigger overlapped with the live sprint controller. Candidate 1 was uploaded twice (refs 58325842 and 58325843), candidate 2 twice (58325859 and 58325860), and candidate 3 once (58325868). The Kaggle API reported the daily quota exhausted after these five successful uploads. Candidates 4 and 5 have no successful submission reference. All five refs were pending at the 00:22 UTC status query.
+- Disabled the already-fired one-shot Kaggle-run and submission Task Scheduler tasks to prevent retries. The 19:35 Task Scheduler refresh and 19:52 controller refresh completed; the 19:57 checkpoint was committed and pushed.
+
+
+## 2026-11-14 00:52 UTC Kaggle and submission status refresh
+
+- Public leaderboard: EquiNexus rank 330/1519, score 0.39, 40 submissions. Leading six: IONode Online 0.70, Tempest 0.64, Sayandeep Dutta 0.62, Harshit Kulkarni 0.62, Tarunkush019 0.62, Kush Patel 0.62. Archive: artifacts/kaggle/leaderboard/20261114005201-utc/filament-segmentation-2026.zip, SHA-256 15e23345a6695e325b2fcaf85f9214749ecf1376f773e450c7352ff449d9f27a.
+- Kaggle status output: artifacts/kaggle/leaderboard/20261114005201-utc/submissions.txt.
+- Nov 14 submissions were produced from source commit 48f6487f3caa97f4df95db417131e87d929201aa.
+- Kaggle ref 58325868: COMPLETE, public score 0.38; EquiNexus Nov 14 3/5; exact public HDJoJo YOLO26x kernel output; team public score 0.55 (exact file score unverified) (submitted 2026-11-14 00:20:31.423000).
+- Kaggle ref 58325860: COMPLETE, public score 0.39; EquiNexus Nov 14 2/5; public ten-model Dariush U-Net + learned filter; upstream nested OOF 0.455236; no frozen-split score (submitted 2026-11-14 00:20:17.970000).
+- Kaggle ref 58325859: COMPLETE, public score 0.39; EquiNexus Nov 14 2/5; public ten-model Dariush U-Net + learned filter; upstream nested OOF 0.455236; no frozen-split score (submitted 2026-11-14 00:20:17.787000).
+- Kaggle ref 58325843: COMPLETE, public score 0.39; EquiNexus Nov 14 1/5; public U-Net + YOLO11s confidence 0.38; grouped OOF PQ 0.452845; holdout PQ 0.454046 (submitted 2026-11-14 00:20:04.507000).
+- Kaggle ref 58325842: COMPLETE, public score 0.39; EquiNexus Nov 14 1/5; public U-Net + YOLO11s confidence 0.38; grouped OOF PQ 0.452845; holdout PQ 0.454046 (submitted 2026-11-14 00:20:04.287000).
+- Prepared candidate SHA-256 (manifest entry EquiNexus Nov 14 1/5; public U-Net + YOLO11s confidence 0.38; grouped OOF PQ 0.452845; holdout PQ 0.454046): 0f58b488ee56cbab5eddac5432d6749d67b85a91afdfd8a3bbffd39eeb8eea03. This identifies a prepared file, not a successful upload; consult the Kaggle references above for actual submissions.
+- Prepared candidate SHA-256 (manifest entry EquiNexus Nov 14 2/5; public ten-model Dariush U-Net + learned filter; upstream nested OOF 0.455236; no frozen-split score): f264ce76fff59ac146b10dbbe196c54d4eda80fbb2a34246540d137a6499ca55. This identifies a prepared file, not a successful upload; consult the Kaggle references above for actual submissions.
+- Prepared candidate SHA-256 (manifest entry EquiNexus Nov 14 3/5; exact public HDJoJo YOLO26x kernel output; team public score 0.55 (exact file score unverified)): 035d5da13bc5898e8c331fc0e5ee21606e3e39e4419708a72529147f0a1ed9b6. This identifies a prepared file, not a successful upload; consult the Kaggle references above for actual submissions.
+- Prepared candidate SHA-256 (manifest entry EquiNexus Nov 14 4/5; I079 Apache-2.0 topology-safe refiner; 1,299 test predictions; no holdout score): 2c07cf2f06ee85b721ccb11631d6876f693ac6516277ed2d1dcd179ee7eb0794. This identifies a prepared file, not a successful upload; consult the Kaggle references above for actual submissions.
+- Prepared candidate SHA-256 (manifest entry EquiNexus Nov 14 5/5; audited-source three-family test consensus; no test labels): 45688ce9ad0921aaa4fd4206e4fada2e0c62f33b896a7ddc2bdd729c7c28dcf6. This identifies a prepared file, not a successful upload; consult the Kaggle references above for actual submissions.
+- Kaggle T4 fold-aware crossfit completed from source commit 27ece8f76d8bde0e13ebc88e42f0649b28a7f039, split 30cb2ec52437daf97e769a3a61bf83350062e6cf4f5d00af1f8399649065e48e, PQ 0.44780036508507; runtime 446.969343289s, peak GPU allocation 1659777536 bytes. Outputs: artifacts/kaggle/runs/public-unet-fold-aware-20261113/dariushafshar-unet-fold-aware-holdout.
+
+## 2026-11-14 01:10 UTC duplicate-submission safeguard
+
+- Updated `scripts/submit_prepared_batch.py` to acquire an exclusive cross-process lock before querying Kaggle, skip candidate descriptions already in submission history, and check the daily allowance only for candidates still pending. Kaggle history errors stop the run before any upload.
+- A read-only Kaggle API query returned 40 submission rows and 38 distinct descriptions; all three distinct Nov 14 candidate descriptions already appear in that history, so retrying the exhausted batch would have zero pending candidates.
+- Kaggle's current submission-limit response reports `num_today=5`, `num_allowed_now=0`, `num_total=40`, and `limited_by_total=false`.
+- A two-process local probe confirmed a second runner is rejected while the first holds the lock. Python syntax compilation and `git diff --check` passed. No upload was attempted after the sprint cutoff.
+
+## 2026-11-14 01:17 UTC final leaderboard refresh
+
+- Downloaded the full 1,519-team public leaderboard to `artifacts/kaggle/leaderboard/20261114011537-utc/filament-segmentation-2026.zip` (SHA-256 `1396d55cb8610b58fe3a8d3db21f753905002ebbd888555823ac9c0a25274b1c`). Its top ten match the 00:52 UTC snapshot.
+- EquiNexus remains rank 330/1,519 at 0.39 with 40 team submissions; the roster is `arvbali`, `lolmrdabbydab`, and `mrinanksivakumar`. Public scores remain preliminary evidence.

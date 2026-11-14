@@ -9,14 +9,16 @@ from __future__ import annotations
 
 import argparse
 import csv
+from contextlib import contextmanager
 import hashlib
 import json
+import os
 import subprocess
 import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -84,12 +86,68 @@ def validate_candidate(candidate: dict[str, Any]) -> Path:
     return path
 
 
-def verify_daily_submission_quota(batch_size: int, log_path: Path | None) -> None:
-    """Fail closed unless Kaggle currently permits the whole batch."""
+@contextmanager
+def exclusive_submission_lock() -> Iterator[None]:
+    """Prevent overlapping local processes from submitting the same batch."""
+    lock_path = REPO_ROOT / "artifacts" / "automation" / "submit-prepared-batch.lock"
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    with lock_path.open("a+b") as stream:
+        stream.seek(0, os.SEEK_END)
+        if stream.tell() == 0:
+            stream.write(b"\0")
+            stream.flush()
+        stream.seek(0)
+
+        if os.name == "nt":
+            import msvcrt
+
+            try:
+                msvcrt.locking(stream.fileno(), msvcrt.LK_NBLCK, 1)
+            except OSError as exc:
+                raise RuntimeError(
+                    "another submission process holds the local Kaggle submission lock"
+                ) from exc
+            unlock = lambda: msvcrt.locking(stream.fileno(), msvcrt.LK_UNLCK, 1)
+        else:
+            import fcntl
+
+            try:
+                fcntl.flock(stream.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except OSError as exc:
+                raise RuntimeError(
+                    "another submission process holds the local Kaggle submission lock"
+                ) from exc
+            unlock = lambda: fcntl.flock(stream.fileno(), fcntl.LOCK_UN)
+
+        try:
+            yield
+        finally:
+            stream.seek(0)
+            unlock()
+
+
+def kaggle_api() -> Any:
     from kaggle.api.kaggle_api_extended import KaggleApi
 
     api = KaggleApi()
     api.authenticate()
+    return api
+
+
+def existing_submission_descriptions(api: Any) -> set[str]:
+    """Return recent team submission descriptions; fail closed if history is unavailable."""
+    submissions = api.competition_submissions(COMPETITION, page_number=-1, page_size=100)
+    if submissions is None:
+        raise RuntimeError("Kaggle returned no submission-history response; refusing to upload")
+    return {
+        str(submission.description).strip()
+        for submission in submissions
+        if submission is not None and getattr(submission, "description", None)
+    }
+
+
+def verify_daily_submission_quota(api: Any, batch_size: int, log_path: Path | None) -> None:
+    """Fail closed unless Kaggle currently permits the whole batch."""
     limits = api.competition_get_submission_limits(COMPETITION)
     allowed = int(limits.num_allowed_now)
     emit(
@@ -201,9 +259,6 @@ def main() -> int:
         seen_hashes.add(candidate["sha256"])
         resolved.append((candidate, path))
 
-    if args.submit:
-        verify_daily_submission_quota(len(resolved), args.log)
-
     mode = "submit" if args.submit else "dry-run"
     emit(
         {
@@ -219,8 +274,109 @@ def main() -> int:
     )
 
     kaggle = REPO_ROOT / ".venv" / "Scripts" / "kaggle.exe"
-    if args.submit and not kaggle.is_file():
-        raise FileNotFoundError(f"Kaggle CLI is not installed at {kaggle}")
+    if args.submit:
+        if not kaggle.is_file():
+            raise FileNotFoundError(f"Kaggle CLI is not installed at {kaggle}")
+
+        messages = [str(candidate.get("message", "")).strip() for candidate, _ in resolved]
+        if any(not message for message in messages):
+            raise ValueError("every candidate must have a non-empty Kaggle submission description")
+        if len(messages) != len(set(messages)):
+            raise ValueError("candidate descriptions must be unique within a batch")
+
+        with exclusive_submission_lock():
+            api = kaggle_api()
+            existing = existing_submission_descriptions(api)
+            for candidate, path in resolved:
+                message = str(candidate["message"]).strip()
+                if message in existing:
+                    emit(
+                        {
+                            "event": "candidate_skipped_already_submitted",
+                            "path": str(path.relative_to(REPO_ROOT)),
+                            "sha256": candidate["sha256"],
+                            "message": message,
+                        },
+                        args.log,
+                    )
+            pending = [
+                pair for pair in resolved if str(pair[0]["message"]).strip() not in existing
+            ]
+            already_submitted = len(resolved) - len(pending)
+            emit(
+                {
+                    "event": "submission_idempotency_preflight",
+                    "candidate_count": len(resolved),
+                    "already_submitted_count": already_submitted,
+                    "pending_count": len(pending),
+                    "utc": datetime.now(timezone.utc).isoformat(),
+                },
+                args.log,
+            )
+            if pending:
+                verify_daily_submission_quota(api, len(pending), args.log)
+            else:
+                emit(
+                    {"event": "batch_already_submitted", "candidate_count": len(resolved)},
+                    args.log,
+                )
+
+            for index, (candidate, path) in enumerate(pending, start=1):
+                event = {
+                    "event": "candidate_ready",
+                    "index": index,
+                    "count": len(pending),
+                    "path": str(path.relative_to(REPO_ROOT)),
+                    "sha256": candidate["sha256"],
+                    "predicted_instances": candidate["predicted_instances"],
+                    "oof_pq": candidate.get("oof_pq"),
+                    "holdout_pq": candidate.get("holdout_pq"),
+                    "crossfit_pq": candidate.get("crossfit_pq"),
+                    "validation_protocol": candidate.get("validation_protocol"),
+                    "message": candidate["message"],
+                }
+                command = [
+                    str(kaggle), "competitions", "submit", "-c", COMPETITION,
+                    "-f", str(path), "-m", str(candidate["message"]),
+                ]
+                result = subprocess.run(
+                    command, cwd=REPO_ROOT, capture_output=True, text=True, check=False
+                )
+                emit(
+                    {
+                        **event,
+                        "event": "submission_result",
+                        "returncode": result.returncode,
+                        "stdout": result.stdout.strip(),
+                        "stderr": result.stderr.strip(),
+                        "utc": datetime.now(timezone.utc).isoformat(),
+                    },
+                    args.log,
+                )
+                if result.returncode != 0:
+                    emit(
+                        {"event": "batch_stopped", "reason": "kaggle_cli_failed", "index": index},
+                        args.log,
+                    )
+                    return result.returncode
+                if index < len(pending) and args.delay_seconds > 0:
+                    time.sleep(args.delay_seconds)
+
+            result = subprocess.run(
+                [str(kaggle), "competitions", "submissions", "-c", COMPETITION],
+                cwd=REPO_ROOT, capture_output=True, text=True, check=False,
+            )
+            emit(
+                {
+                    "event": "submission_status_refresh",
+                    "returncode": result.returncode,
+                    "stdout": result.stdout.strip(),
+                    "stderr": result.stderr.strip(),
+                    "utc": datetime.now(timezone.utc).isoformat(),
+                },
+                args.log,
+            )
+            return result.returncode
 
     for index, (candidate, path) in enumerate(resolved, start=1):
         event = {
@@ -236,53 +392,7 @@ def main() -> int:
             "validation_protocol": candidate.get("validation_protocol"),
             "message": candidate["message"],
         }
-        if not args.submit:
-            emit(event, args.log)
-            continue
-
-        command = [
-            str(kaggle), "competitions", "submit", "-c", COMPETITION,
-            "-f", str(path), "-m", str(candidate["message"]),
-        ]
-        result = subprocess.run(
-            command, cwd=REPO_ROOT, capture_output=True, text=True, check=False
-        )
-        emit(
-            {
-                **event,
-                "event": "submission_result",
-                "returncode": result.returncode,
-                "stdout": result.stdout.strip(),
-                "stderr": result.stderr.strip(),
-                "utc": datetime.now(timezone.utc).isoformat(),
-            },
-            args.log,
-        )
-        if result.returncode != 0:
-            emit(
-                {"event": "batch_stopped", "reason": "kaggle_cli_failed", "index": index},
-                args.log,
-            )
-            return result.returncode
-        if index < len(resolved) and args.delay_seconds > 0:
-            time.sleep(args.delay_seconds)
-
-    if args.submit:
-        result = subprocess.run(
-            [str(kaggle), "competitions", "submissions", "-c", COMPETITION],
-            cwd=REPO_ROOT, capture_output=True, text=True, check=False,
-        )
-        emit(
-            {
-                "event": "submission_status_refresh",
-                "returncode": result.returncode,
-                "stdout": result.stdout.strip(),
-                "stderr": result.stderr.strip(),
-                "utc": datetime.now(timezone.utc).isoformat(),
-            },
-            args.log,
-        )
-        return result.returncode
+        emit(event, args.log)
     return 0
 
 
