@@ -1,2 +1,0 @@
-# GPU and inference packages are pinned together in requirements.txt so local
-# runs and the reproduction notebook install the same tested package versions.

@@ -36,7 +36,6 @@ def _source_files() -> list[Path]:
         REPO_ROOT / "scripts" / "run_training_partition_oof.py",
         REPO_ROOT / "configs" / "validation-baseline.json",
         REPO_ROOT / "requirements.txt",
-        REPO_ROOT / "requirements-segmentation.txt",
     ]
 
 
@@ -103,7 +102,7 @@ Run configuration: 512-pixel crops, 3,000 steps per fold, batch size 8, 5 folds,
         "os.environ['HF_HUB_DISABLE_XET'] = '1'\n"
         "for key in ('PIP_CACHE_DIR', 'TMPDIR', 'TORCH_HOME', 'HF_HOME'):\n"
         "    Path(os.environ[key]).mkdir(parents=True, exist_ok=True)\n"
-        "for requirements in ('requirements.txt', 'requirements-segmentation.txt'):\n"
+        "for requirements in ('requirements.txt',):\n"
         "    subprocess.run([sys.executable, '-m', 'pip', 'install', '--disable-pip-version-check', '-r', str(REPOSITORY_PATH / requirements)], check=True)\n"
         "import torch, segmentation_models_pytorch as smp, timm\n"
         "devices = [{'name': torch.cuda.get_device_name(i), 'total_memory_bytes': torch.cuda.get_device_properties(i).total_memory} for i in range(torch.cuda.device_count())]\n"

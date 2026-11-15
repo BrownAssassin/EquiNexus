@@ -39,7 +39,6 @@ def _source_paths() -> list[Path]:
         REPO_ROOT / "configs" / "validation-baseline.json",
         REPO_ROOT / "notebooks" / "validation_baseline.ipynb",
         REPO_ROOT / "requirements.txt",
-        REPO_ROOT / "requirements-gpu.txt",
     ]
     return [path for path in paths if path.is_file()]
 

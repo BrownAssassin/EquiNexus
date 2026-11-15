@@ -347,7 +347,7 @@ def build_seed_refiner() -> nn.Module:
     try:
         import segmentation_models_pytorch as smp
     except ImportError as exc:
-        raise RuntimeError("Install requirements-segmentation.txt for the seed refiner") from exc
+        raise RuntimeError("Install requirements.txt for the seed refiner") from exc
     return smp.Unet(
         encoder_name="resnet34",
         encoder_weights=None,

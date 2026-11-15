@@ -248,7 +248,6 @@ def validate_submit_worktree(git_output: Any, current_commit: str) -> None:
     allowed_pending_paths = {
         "README.md",
         "requirements.txt",
-        "requirements-gpu.txt",
         "licenses/THIRD_PARTY_NOTICES.md",
         "docs/experiment-log.md",
         "docs/model-sprint.md",

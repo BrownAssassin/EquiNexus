@@ -199,7 +199,7 @@ def build_filament_model(
             import segmentation_models_pytorch as smp
         except ImportError as exc:
             raise RuntimeError(
-                "Install requirements-segmentation.txt to use the SMP ResNet34 U-Net."
+                "Install requirements.txt to use the SMP ResNet34 U-Net."
             ) from exc
         model = smp.Unet(
             encoder_name="resnet34",

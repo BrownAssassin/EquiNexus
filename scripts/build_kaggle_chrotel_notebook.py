@@ -48,7 +48,6 @@ def _source_bundle() -> tuple[dict[str, str], str, str]:
         for name in (
             "configs/validation-baseline.json",
             "requirements.txt",
-            "requirements-data-preparation.txt",
         )
     )
     paths = [path for path in paths if path.is_file()]

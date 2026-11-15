@@ -1,2 +1,0 @@
-# Optional dependency used only to read the KIS ChroTel FITS archive.
-astropy==8.0.2

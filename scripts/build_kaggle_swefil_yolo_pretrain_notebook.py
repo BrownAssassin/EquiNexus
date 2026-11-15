@@ -38,7 +38,7 @@ def _source_files() -> list[Path]:
         REPO_ROOT / "scripts" / "export_yolo_dataset.py",
         REPO_ROOT / "scripts" / "run_yolo_swefil_pretrain.py",
         REPO_ROOT / "configs" / "validation-baseline.json",
-        REPO_ROOT / "requirements-detector.txt",
+        REPO_ROOT / "requirements.txt",
     ]
 
 
@@ -123,7 +123,7 @@ SWEFil source revision: `{SWEFIL_REVISION}`. Run configuration: {image_size}px, 
         "os.environ['TORCH_HOME'] = '/kaggle/working/equinexus/torch-home'\n"
         "for key in ('YOLO_CONFIG_DIR', 'TORCH_HOME'):\n"
         "    Path(os.environ[key]).mkdir(parents=True, exist_ok=True)\n"
-        "subprocess.run([sys.executable, '-m', 'pip', 'install', '--disable-pip-version-check', '--no-cache-dir', '-r', str(REPOSITORY_PATH / 'requirements-detector.txt')], check=True)\n"
+        "subprocess.run([sys.executable, '-m', 'pip', 'install', '--disable-pip-version-check', '--no-cache-dir', '-r', str(REPOSITORY_PATH / 'requirements.txt')], check=True)\n"
         "import torch, ultralytics\n"
         "devices = [{'name': torch.cuda.get_device_name(i), 'total_memory_bytes': torch.cuda.get_device_properties(i).total_memory} for i in range(torch.cuda.device_count())]\n"
         "print({'python': sys.version.split()[0], 'torch': torch.__version__, 'cuda': torch.version.cuda, 'ultralytics': ultralytics.__version__, 'cuda_available': torch.cuda.is_available(), 'devices': devices})\n"

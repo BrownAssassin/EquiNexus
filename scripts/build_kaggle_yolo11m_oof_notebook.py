@@ -39,7 +39,7 @@ def _source_files() -> list[Path]:
         REPO_ROOT / "scripts" / "score_yolo_oof.py",
         REPO_ROOT / "configs" / "validation-baseline.json",
         REPO_ROOT / "data" / "splits" / "observation_oof_seed42_5fold.csv",
-        REPO_ROOT / "requirements-detector.txt",
+        REPO_ROOT / "requirements.txt",
     ]
 
 
@@ -115,7 +115,7 @@ Configuration: {image_size}-pixel input, {epochs} epochs, batch size {batch_size
         "os.environ['TORCH_HOME'] = '/kaggle/working/equinexus/torch-home'\n"
         "Path(os.environ['YOLO_CONFIG_DIR']).mkdir(parents=True, exist_ok=True)\n"
         "Path(os.environ['TORCH_HOME']).mkdir(parents=True, exist_ok=True)\n"
-        "subprocess.run([sys.executable, '-m', 'pip', 'install', '--disable-pip-version-check', '--no-cache-dir', '-r', str(REPOSITORY_PATH / 'requirements-detector.txt')], check=True)\n"
+        "subprocess.run([sys.executable, '-m', 'pip', 'install', '--disable-pip-version-check', '--no-cache-dir', '-r', str(REPOSITORY_PATH / 'requirements.txt')], check=True)\n"
         "import torch, ultralytics\n"
         "devices = [{'name': torch.cuda.get_device_name(i), 'total_memory_bytes': torch.cuda.get_device_properties(i).total_memory} for i in range(torch.cuda.device_count())]\n"
         "print({'python': sys.version.split()[0], 'torch': torch.__version__, 'cuda': torch.version.cuda, 'ultralytics': ultralytics.__version__, 'devices': devices})\n"

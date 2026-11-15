@@ -45,7 +45,6 @@ def _source_fingerprint(repo_root: Path) -> str:
         repo_root / "configs" / "validation-baseline.json",
         repo_root / "notebooks" / "validation_baseline.ipynb",
         repo_root / "requirements.txt",
-        repo_root / "requirements-gpu.txt",
     ]
     digest = hashlib.sha256()
     for path in paths:

@@ -59,7 +59,7 @@ On Windows PowerShell, create the environment and keep Python's downloads and te
     $env:PIP_CACHE_DIR = Join-Path $PWD '.cache\pip'
     $env:TEMP = Join-Path $PWD '.cache\tmp'
     $env:TMP = $env:TEMP
-    .\.venv\Scripts\python.exe -m pip install -r requirements.txt -r requirements-gpu.txt
+    .\.venv\Scripts\python.exe -m pip install -r requirements.txt
     $env:PYTHONPATH = Join-Path $PWD 'src'
     .\.venv\Scripts\python.exe scripts\run_gpu_smoke.py
     .\.venv\Scripts\python.exe scripts\run_validation.py
