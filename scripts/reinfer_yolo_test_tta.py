@@ -22,7 +22,7 @@ sys.path.insert(0, str(REPO_ROOT / "src"))
 
 from filament_baseline.data import inventory, load_dataset
 from filament_baseline.split import create_observation_split
-from scripts.reinfer_yolo_oof_tta import _predict_image, _sha256
+from scripts.reinfer_yolo_oof_tta import _inside, _predict_image, _sha256
 
 
 def main() -> int:
@@ -46,9 +46,15 @@ def main() -> int:
     ).expanduser().resolve()
     detector_root = args.detector_run_root.expanduser().resolve()
     output_dir = args.output_dir.expanduser().resolve()
+    if not (
+        _inside(data_root, repo_root / "data")
+        or str(data_root).startswith("/kaggle/input/")
+    ):
+        raise ValueError(
+            "Competition data must be inside the local data/ folder or a Kaggle input mount"
+        )
     for label, path, allowed_root in (
-        ("competition data", data_root, repo_root / "data"),
-        ("detector checkpoints", detector_root, repo_root / "artifacts"),
+        ("detector checkpoints", detector_root, repo_root),
         ("test predictions", output_dir, repo_root / "artifacts"),
     ):
         if not path.is_relative_to(allowed_root.resolve()):
@@ -78,7 +84,9 @@ def main() -> int:
     )
     if frozen_split.sha256 != config["expected_split_sha256"]:
         raise RuntimeError("The frozen holdout split digest changed")
-    oof_manifest = repo_root / "data" / "splits" / "observation_oof_seed42_5fold.csv"
+    oof_manifest = repo_root / "configs" / "observation_oof_seed42_5fold.csv"
+    if not oof_manifest.is_file():
+        oof_manifest = repo_root / "data" / "splits" / "observation_oof_seed42_5fold.csv"
     if not oof_manifest.is_file():
         raise FileNotFoundError(oof_manifest)
 
@@ -102,6 +110,12 @@ def main() -> int:
     import torch
     import ultralytics
     from ultralytics import YOLO
+
+    torch.use_deterministic_algorithms(True, warn_only=True)
+    torch.backends.cudnn.benchmark = False
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cuda.matmul.allow_tf32 = False
+    torch.backends.cudnn.allow_tf32 = False
 
     if not torch.cuda.is_available() and args.device != "cpu":
         raise RuntimeError("CUDA is unavailable; select --device cpu only for a smoke run")
@@ -198,6 +212,9 @@ def main() -> int:
             "nms_iou": args.nms_iou,
             "max_detections_per_transform": args.max_detections,
             "device": args.device,
+            "deterministic_torch_algorithms": True,
+            "cudnn_benchmark": False,
+            "tf32": False,
         },
         "runtime": {
             "prediction_seconds": round(time.perf_counter() - started, 3),

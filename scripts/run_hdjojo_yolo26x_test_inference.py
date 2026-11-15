@@ -117,9 +117,23 @@ def main() -> int:
     parser.add_argument("--device", default="auto", help="auto, cpu, or CUDA device index such as 0")
     parser.add_argument("--max-images", type=int, help="limit inference for a local GPU smoke run")
     parser.add_argument("--half", action="store_true", help="use half precision when CUDA is selected")
+    parser.add_argument(
+        "--match-public-kernel",
+        action="store_true",
+        help="match the upstream notebook's class-ordered overlap clipping and IDs",
+    )
     args = parser.parse_args()
 
-    data_root = require_within(args.data_root, REPO_ROOT / "data", "Competition data")
+    data_root = args.data_root.expanduser().resolve()
+    allowed_data_roots = [REPO_ROOT / "data"]
+    kaggle_input = Path("/kaggle/input")
+    if kaggle_input.is_dir():
+        allowed_data_roots.append(kaggle_input)
+    if not any(data_root.is_relative_to(root.resolve()) for root in allowed_data_roots):
+        raise ValueError(
+            "Competition data must stay under the repository data/ folder or /kaggle/input: "
+            f"{data_root}"
+        )
     model_path = require_within(args.model_path, REPO_ROOT / "data" / "reference", "Public model checkpoint")
     output_root = require_within(args.output_dir, REPO_ROOT / "artifacts", "Run output")
     if not model_path.is_file():
@@ -173,37 +187,64 @@ def main() -> int:
                 raise ValueError(f"Expected {IMAGE_SIZE} image at {path}, got {source_image.size}")
             gray = np.asarray(source_image.convert("L"), dtype=np.uint8)
 
+        prediction_kwargs: dict[str, Any] = {
+            "imgsz": 2048,
+            "conf": 0.25,
+            "iou": 0.0,
+            "max_det": 100,
+            "verbose": False,
+            "device": device,
+        }
+        if args.half:
+            prediction_kwargs["half"] = True
         result = model.predict(
             str(path),
-            imgsz=2048,
-            conf=0.25,
-            iou=0.0,
-            max_det=100,
-            verbose=False,
-            device=device,
-            half=args.half,
+            **prediction_kwargs,
         )[0]
         surviving_masks: list[np.ndarray] = []
         surviving_scores: list[float] = []
+        surviving_ids: list[int] = []
         if result.masks is not None:
             raw_masks = result.masks.data.detach().to("cpu").numpy()
-            scores = result.boxes.conf.detach().to("cpu").numpy()
-            if len(raw_masks) != len(scores):
+            confidences = result.boxes.conf.detach().to("cpu").numpy()
+            order_scores = (
+                result.boxes.cls.detach().to("cpu").numpy()
+                if args.match_public_kernel
+                else confidences
+            )
+            if len(raw_masks) != len(order_scores) or len(raw_masks) != len(confidences):
                 raise ValueError(f"YOLO mask/score count mismatch for {path.name}")
-            for prediction_index in np.argsort(scores)[::-1]:
-                mask = raw_masks[int(prediction_index)] > 0.5
-                if mask.shape != IMAGE_SIZE:
-                    mask = cv2.resize(
-                        mask.astype(np.uint8), IMAGE_SIZE, interpolation=cv2.INTER_NEAREST
-                    ).astype(bool)
-                clean = mask & ~np.logical_or.reduce(surviving_masks) if surviving_masks else mask
+            for ordered_rank, prediction_index in enumerate(np.argsort(order_scores)[::-1], start=1):
+                mask = (
+                    raw_masks[int(prediction_index)].astype(bool)
+                    if args.match_public_kernel
+                    else raw_masks[int(prediction_index)] > 0.5
+                )
+                if args.match_public_kernel:
+                    if ordered_rank == 1:
+                        accumulated_mask = np.zeros(mask.shape, dtype=np.uint8)
+                    clean = mask & ~accumulated_mask.astype(bool)
+                    accumulated_mask |= mask.astype(np.uint8)
+                    if clean.shape != IMAGE_SIZE:
+                        clean = cv2.resize(
+                            clean.astype(np.uint8), IMAGE_SIZE, interpolation=cv2.INTER_NEAREST
+                        ).astype(bool)
+                else:
+                    if mask.shape != IMAGE_SIZE:
+                        mask = cv2.resize(
+                            mask.astype(np.uint8), IMAGE_SIZE, interpolation=cv2.INTER_NEAREST
+                        ).astype(bool)
+                    clean = mask & ~np.logical_or.reduce(surviving_masks) if surviving_masks else mask
                 if int(clean.sum()) < 5:
                     continue
                 surviving_masks.append(clean)
-                surviving_scores.append(float(scores[int(prediction_index)]))
+                surviving_scores.append(float(confidences[int(prediction_index)]))
+                surviving_ids.append(
+                    ordered_rank if args.match_public_kernel else len(surviving_masks)
+                )
 
-        for instance_index, mask in enumerate(surviving_masks, start=1):
-            rows.append((f"{path.stem}_{instance_index}", encode_mask(mask)))
+        for instance_id, mask in zip(surviving_ids, surviving_masks):
+            rows.append((f"{path.stem}_{instance_id}", encode_mask(mask)))
         image_results.append(
             {
                 "image": path.name,
@@ -220,7 +261,10 @@ def main() -> int:
         torch.cuda.synchronize()
     submission_path = output_root / "submission.csv"
     with submission_path.open("w", encoding="ascii", newline="") as stream:
-        writer = csv.writer(stream, lineterminator="\n")
+        writer = csv.writer(
+            stream,
+            lineterminator="\r\n" if args.match_public_kernel else "\n",
+        )
         writer.writerow(("filament_id", "segmentation_rle"))
         writer.writerows(rows)
     elapsed = time.perf_counter() - started
@@ -257,7 +301,11 @@ def main() -> int:
             "confidence_threshold": 0.25,
             "nms_iou_threshold": 0.0,
             "max_detections": 100,
-            "overlap_resolution": "sort by model confidence, then subtract previously claimed mask pixels",
+            "overlap_resolution": (
+                "upstream notebook class ordering, then subtract previously claimed mask pixels"
+                if args.match_public_kernel
+                else "sort by model confidence, then subtract previously claimed mask pixels"
+            ),
             "minimum_remaining_mask_area": 5,
             "half_precision": args.half,
         },

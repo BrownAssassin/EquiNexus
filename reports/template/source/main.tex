@@ -1,0 +1,123 @@
+% =============================================================================
+% COPYRIGHT AND DISCLAIMER
+% =============================================================================
+% This file is provided as a convenience template for competition participants.
+% By using it, you accept full responsibility for compliance with all applicable
+% copyright, licensing, and usage rules of the Association for Computing
+% Machinery (ACM) and of any LaTeX packages you load (including, without
+% limitation, the "acmart" document class and related ACM materials).
+%
+% Consult ACM's official publication, template, and copyright policies before
+% using this setup for any purpose other than this competition. Do not assume
+% that this template may be reused, redistributed, or submitted elsewhere
+% without independently verifying ACM's current rules.
+%
+% Use of the "acmart" class, the "sigconf" option, or ACM-style formatting in
+% this template does NOT mean that this report, this competition, its organizers,
+% or any resulting PDF is sponsored, endorsed, affiliated with, or published by
+% ACM. ACM trademarks and branding remain the property of ACM.
+%
+% Template packages live in preamble.tex.
+% Citations live in main.bib. Edit this file with your paper content.
+% =============================================================================
+
+\documentclass[sigconf]{acmart}
+\input{preamble}
+
+% Guide styling: \guideStyletrue = show gray italic hints; \guideStylefalse = omit them
+\guideStyletrue
+% \guideStylefalse
+
+\begin{document}
+
+\title{\guide{Your Title Here}}  % Replace this with your title
+\subtitle{A Solution to the Solar Filament Segmentation Challenge 2026} % DO NOT CHANGE
+
+
+\author{\guide{Firstname Lastname}}
+\affiliation{%
+  \institution{\guide{Your Institution}}  % <- Optional (remove if you are not currently affiliated with any institute)
+  \city{\guide{City}}
+  \country{\guide{Country}}
+}
+\email{first.author@example.com}   % <- Replace with your own email
+
+% \author{\guide{Second Author}}
+% \affiliation{%
+%   \institution{\guide{Your Institution}}  % <- Optional (remove if you are not currently affiliated with any institute)
+%   \city{\guide{City}}
+%   \country{\guide{Country}}
+% }
+% \email{second.author@example.com}  % <- Replace with your own email
+
+\begin{abstract}
+    This report describes our solution to the Solar Filament Segmentation Challenge~2026, a Kaggle competition on automatic segmentation of solar filaments in GONG H-$\alpha$ observations. \guide{Continue the abstract with the details of your work.}
+\end{abstract}
+
+\maketitle
+
+\ifguideStyle
+\noindent{\color{gray!65}\itshape
+Guide mode is on.}
+\par\medskip
+\fi
+
+\guide{Please limit your report to four (4) pages, excluding the Acknowledgment and References sections. Throughout this document, please follow these considerations:
+\begin{itemize}
+    \item Do not alter any text that is currently in black color (except for the emails under authors' name).
+    \item Replace all gray text with your own.
+    \item When you are done with the report, please replace \texttt{\textbackslash guideStyletrue} with \texttt{\textbackslash guideStylefalse}, to remove any gray text. Alternatively, you can remove any text wrapped in \texttt{\textbackslash guide\{\}},
+    \item Be as succinct as possible, and only provide details regarding your own work. For example, there is no need to discuss what solar filaments are, or why filament segmentation matters.
+    \item If you must, you can add extra sections.
+\end{itemize}}
+
+
+% ==================================== %
+%              INTRODUCTION            %
+% ==================================== %
+\section{Introduction}
+    This report goes over the details of our submitted solution to the Solar Filament Segmentation Challenge~2026 \cite{filament-segmentation-2026}. The challenge, launched on July~10,~2026, is organized by the Earth-Space AI Research (ESAIR) Lab\footnote{\href{https://www.esairlab.com/home}{www.esairlab.com/}}. This challenge utilizes the MAGFiLO dataset for evaluation of the segmentation algorithms \cite{ahmadzadeh2024dataset}. \guide{Continue with your own text; you really do not need a long introduction section.}
+
+
+% ==================================== %
+%              METHODOLOGY             %
+% ==================================== %
+\section{Methodology}\label{sec:methodology}
+    \guide{Explain your methodology, ensuring that the following items are included:
+    \begin{itemize}
+        \item (for novel algorithms) a detailed description of the algorithm introduced for segmentation,
+        \item (for existing algorithms) a quick review of the algorithm used for segmentation, and appropriate citation(s),
+        \item a detailed description of the end-to-end data pipeline, including pre-processing and post-processing,
+        \item (for ML models) a detailed description of any sampling strategy including train-val-test splits,
+        \item a graphic illustrating the entire data pipeline,
+        \item one or more graphics showing a few examples of the segmentations.
+    \end{itemize}}
+
+% ==================================== %
+%              EVALUATION              %
+% ==================================== %
+\section{Evaluation}\label{sec:evaluation}
+    \guide{Explain your evaluation. This includes:
+    \begin{itemize}
+        \item the evaluation strategy,
+        \item plots and/or tables showing the performance of the segmentation algorithm (please include error bars and uncertainty measures whenever possible),
+        \item strengths and weaknesses of the proposed algorithm, and possible strategies for improvement.
+    \end{itemize}}
+
+
+
+% ==================================== %
+%            ACKNOWLEDGMENT            %
+% ==================================== %
+\section{Acknowledgment}\label{sec:acknowledgment}
+    % Do not change
+    The organization of the Filament Segmentation Challenge 2026 is partially supported by the U.S. National Science Foundation (NSF) under Grant No. 2209912 and 2433781, directorate for Computer and Information Science and Engineering (CSE), and Office of Advanced Cyberinfrastructure (OAC), and Grant No. 2511630, AST Division Of Astronomical Sciences and MPS Directorate for Mathematical and Physical Sciences.
+
+    The Filament Segmentation Challenge 2026 is sponsored by the U.S. National Science Foundation (NSF) National Solar Observatory (NSO).
+
+    This work utilizes GONG data obtained by the NSO Integrated Synoptic Program, managed by the National Solar Observatory, which is operated by the Association of Universities for Research in Astronomy (AURA), Inc. under a cooperative agreement with the National Science Foundation and with contribution from the National Oceanic and Atmospheric Administration. The GONG network of instruments is hosted by the Big Bear Solar Observatory, High Altitude Observatory, Learmonth Solar Observatory, Udaipur Solar Observatory, Instituto de Astrofísica de Canarias, and Cerro Tololo Interamerican Observatory.
+
+\bibliographystyle{ACM-Reference-Format}
+\bibliography{main}
+
+\end{document}

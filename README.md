@@ -2,9 +2,9 @@
 
 Working repository for the [Solar Filament Segmentation Challenge 2026](https://www.kaggle.com/competitions/filament-segmentation-2026).
 
-**Team:** Arv Bali and Thai Le
+**Kaggle team accounts:** `arvbali`, `lolmrdabbydab`, and `mrinanksivakumar`
 
-**Current phase:** grouped validation, model comparison, and submission selection
+**Current phase:** final package prepared; Google Form pending
 
 ## Challenge
 
@@ -18,7 +18,7 @@ Use Kaggle for attached competition data and larger GPU runs. The local RTX 5070
 2. Use the shared src/ implementation on the laptop and in Kaggle notebooks. Record the source commit and runtime details for every run.
 3. Keep validation splits grouped by original observation so alternate annotator records cannot cross between train and validation.
 4. Use the local RTX 5070 for small or patch-based model experiments; use Kaggle GPU sessions for larger runs and competition data access.
-5. Do not commit competition data, credentials, checkpoints, generated overlays, or submission files. Keep run outputs under ignored artifacts/.
+5. Keep raw competition data, credentials, model checkpoints, caches, run outputs, and submission CSVs out of Git. The reviewed validation figure used in the required report is included under reports/final/figures/. Keep local data under data/ and run outputs under ignored artifacts/.
 
 The repository's .gitignore excludes local data, environments, caches, model artifacts, credentials, and outputs. Kaggle's mounted input and working directories are remote runtime paths.
 
@@ -38,9 +38,13 @@ requirements.txt
 
 The organizers request a four-page technical report, a publicly accessible Git repository, pinned dependencies, and a Jupyter notebook that illustrates the complete pipeline and reproduces predictions using competition data.
 
+The final Kaggle reproduction notebook is [filament-final-submission.ipynb](notebooks/kaggle/final_solution/filament-final-submission.ipynb). It attaches the competition input, downloads and verifies the model bundle and selected CSV from the `filament-final-2026` GitHub release, runs the full inference pipeline without retraining, validates the generated masks, and writes the exact scored file to `/kaggle/working/submission.csv`. A fresh GPU replay can differ at thresholded pixels across runtimes; the notebook records that replay hash and uses the hash-verified selected CSV asset if it differs. The assets are hosted in the release rather than Git LFS; model hashes, attributions, and licenses are recorded in the weight manifest and [third-party notices](licenses/THIRD_PARTY_NOTICES.md).
+
+The selected submission is the label-free three-family test consensus (Kaggle ref `58359982`, public score `0.40`). It has no EquiNexus frozen-split PQ; the score is a public leaderboard result. The editable report source and compiled PDF are in [reports/final](reports/final/). The author block remains as supplied in the organizer's template for completion by the team.
+
 ## License
 
-Unless a file states otherwise, EquiNexus source code and notebooks are licensed under the GNU Affero General Public License version 3. See [LICENSE](LICENSE). Copyright (C) 2026 EquiNexus contributors. Third-party software, pretrained weights, external datasets, and competition materials retain their own license and use terms; local data and generated artifacts are excluded from this repository.
+Unless a file states otherwise, EquiNexus source code and notebooks are licensed under the GNU Affero General Public License version 3. See [LICENSE](LICENSE). Copyright (C) 2026 EquiNexus contributors. Third-party software, pretrained weights, external datasets, and competition materials retain their own license and use terms; local data and routine run artifacts are excluded from this repository.
 
 See the [competition overview](https://www.kaggle.com/competitions/filament-segmentation-2026/overview), [data tab](https://www.kaggle.com/competitions/filament-segmentation-2026/data), [rules](https://www.kaggle.com/competitions/filament-segmentation-2026/rules), and [organizers' self-evaluation notebook](https://www.kaggle.com/code/azimahmadzadeh/self-evaluation-notebook).
 

@@ -1,0 +1,20 @@
+{
+  "id": "mrinanksivakumar/equinexus-final-solar-filament-solution-20261114",
+  "title": "EquiNexus Final Solar Filament Solution 20261114",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_tpu": false,
+  "enable_internet": true,
+  "competition_sources": [
+    "filament-segmentation-2026"
+  ],
+  "dataset_sources": [],
+  "model_sources": [],
+  "code_file": "filament-final-submission.ipynb",
+  "machine_shape": "NvidiaTeslaT4",
+  "keywords": [
+    "gpu"
+  ]
+}

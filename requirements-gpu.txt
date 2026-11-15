@@ -1,2 +1,2 @@
---extra-index-url https://download.pytorch.org/whl/cu132
-torch==2.15.0+cu132
+# GPU and inference packages are pinned together in requirements.txt so local
+# runs and the reproduction notebook install the same tested package versions.

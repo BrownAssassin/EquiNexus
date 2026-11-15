@@ -3,7 +3,7 @@
 ## I079 solar-filament inference source and model assets
 
 - Source notebook: [LB 0.70 topology-safe solar filaments handoff](https://www.kaggle.com/code/phuongncn/lb-0-70-topology-safe-solar-filaments-handoff), published by Kaggle user `phuongncn`.
-- Model assets: [`phuongncn/solar-filament-i079-weights`](https://www.kaggle.com/models/phuongncn/solar-filament-i079-weights). The model card declares Apache License 2.0. The detector and refiner files are downloaded separately into the ignored `data/reference/public-models/` directory and are not included in this repository.
+- Model assets: [`phuongncn/solar-filament-i079-weights`](https://www.kaggle.com/models/phuongncn/solar-filament-i079-weights). The model card declares Apache License 2.0. The detector and refiner files are stored locally under the ignored `data/reference/public-models/` directory and are not committed to Git; if used by the final solution, they are distributed as a hash-verified GitHub Release asset.
 - License: Apache License 2.0. A copy of the license is included at [`Apache-2.0.txt`](Apache-2.0.txt).
 - EquiNexus modifications in `scripts/run_i079_topology_safe_inference.py`: local and Kaggle path discovery, a command-line interface, source and model hash recording, runtime and hardware metadata, and strict test-image, mask, and RLE validation. The pipeline remains image-conditioned and reads only the supplied H-alpha test images.
 
@@ -12,9 +12,16 @@ The upstream notebook and model card are the sources for the third-party materia
 ## Public competition-trained U-Net weights
 
 - Dataset: [Solar Filament U-Net Weights (PQ 0.45 OOF)](https://www.kaggle.com/datasets/dariushafshar/solar-filament-unet-weights), published by Kaggle user `dariushafshar`; related inference notebook: [Solar Filament U-Net: OOF 0.45 vs Public 0.39](https://www.kaggle.com/code/dariushafshar/solar-filament-u-net-oof-0-45-vs-public-0-39).
-- The dataset contains ten ResNet34/EfficientNetV2-S U-Net checkpoints and fold/provenance files, but no competition images, masks, or labels. The Kaggle dataset metadata declares `CC-BY-NC-SA-4.0`; the notebook's credits cell says the weights are `CC BY 4.0`. Because those statements conflict, EquiNexus conservatively treats the weights as `CC-BY-NC-SA-4.0` unless the author clarifies otherwise. Their use is limited to this non-commercial research competition, as authorized by the team.
+- The dataset contains ten ResNet34/EfficientNetV2-S U-Net checkpoints and fold/provenance files, but no competition images, masks, or labels. The Kaggle dataset metadata declares `CC-BY-NC-SA-4.0`; the notebook's credits cell says the weights are `CC BY 4.0`. Because those statements conflict, EquiNexus conservatively treats the weights as `CC-BY-NC-SA-4.0` unless the author clarifies otherwise. See the [CC BY-NC-SA 4.0 legal code](https://creativecommons.org/licenses/by-nc-sa/4.0/legalcode). Their use is limited to this non-commercial research competition, as authorized by the team.
 - The dataset reports nested OOF PQ 0.4502 on the 707 competition training observations and public leaderboard PQ 0.39. These are upstream-reported results, not EquiNexus validation results. The checkpoints collectively train on all 707 observations, so they are not scored on the frozen 142-observation holdout; the available 142-group per-observation crossfit is not independent holdout evidence. When used for submission, inference reads only the supplied test H-alpha images.
-- Local weights are stored under the ignored `data/reference/public-datasets/dariushafshar-solar-filament-unet-weights/` directory. The inference runner records model hashes, source dataset, declared license, runtime, and submission validation details.
+- Local weights are stored under the ignored `data/reference/public-datasets/dariushafshar-solar-filament-unet-weights/` directory and are not committed to Git. If used by the final solution, the release archive records model hashes, source dataset, declared license, runtime, and submission validation details.
+
+## Ultralytics YOLO11 segmentation
+
+- Framework and pretrained model: [Ultralytics YOLO11](https://github.com/ultralytics/ultralytics), using the public COCO-pretrained `yolo11s-seg.pt` checkpoint as the initialization for five fold-specific models. The checkpoint was used to initialize models trained only on the competition-provided training observations and annotations; no external segmentation labels were added.
+- License: AGPL-3.0. The Ultralytics package and derived checkpoints are distributed under AGPL-3.0 unless separately licensed by Ultralytics. The project includes the AGPL license text in [`LICENSE`](../LICENSE) and in any release bundle containing these weights.
+- The final model archive is distributed as a hash-verified GitHub Release asset rather than committed to Git. Its weight manifest records each checkpoint hash, training run metadata, and source commit. The five checkpoints are the fold ensemble used for test inference.
+- EquiNexus's training and inference code is in `scripts/` and `src/`; Ultralytics remains a third-party dependency. The final pipeline uses only the supplied H-alpha test images for inference.
 
 ## GONG-derived auxiliary targets
 

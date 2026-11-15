@@ -146,6 +146,75 @@ def existing_submission_descriptions(api: Any) -> set[str]:
     }
 
 
+def existing_submission_hashes(
+    existing_descriptions: set[str],
+) -> dict[str, dict[str, str]]:
+    """Read hashes for accepted submissions from local Kaggle upload logs."""
+    hashes: dict[str, dict[str, str]] = {}
+    roots = [REPO_ROOT / "artifacts" / "automation", REPO_ROOT / "artifacts" / "submissions"]
+
+    def visit(value: Any, source: Path) -> None:
+        if isinstance(value, str):
+            stripped = value.strip()
+            if stripped.startswith("{"):
+                try:
+                    visit(json.loads(stripped), source)
+                except json.JSONDecodeError:
+                    pass
+            return
+        if isinstance(value, list):
+            for item in value:
+                visit(item, source)
+            return
+        if not isinstance(value, dict):
+            return
+
+        accepted = (
+            value.get("returncode") == 0
+            or "Successfully submitted to" in str(value.get("stdout", ""))
+        )
+        event = value.get("event")
+        known_description = str(value.get("message", "")).strip()
+        was_in_kaggle_history = known_description in existing_descriptions
+        if event == "submission_result" and accepted or (
+            event == "candidate_ready" and was_in_kaggle_history
+        ):
+            digest = str(value.get("sha256", "")).lower()
+            if len(digest) == 64 and all(char in "0123456789abcdef" for char in digest):
+                hashes[digest] = {
+                    "source": str(source.relative_to(REPO_ROOT)),
+                    "message": known_description,
+                    "stdout": str(value.get("stdout", "")),
+                }
+        for item in value.values():
+            visit(item, source)
+
+    for root in roots:
+        if not root.is_dir():
+            continue
+        for path in root.rglob("*.jsonl"):
+            try:
+                with path.open("r", encoding="utf-8-sig") as stream:
+                    for line in stream:
+                        if line.strip():
+                            visit(json.loads(line), path)
+            except (OSError, json.JSONDecodeError):
+                continue
+    return hashes
+
+
+def existing_local_submission_csvs(candidate_paths: set[Path]) -> dict[str, str]:
+    """Find duplicate bytes among all earlier locally retained submission files."""
+    root = (REPO_ROOT / "artifacts" / "submissions").resolve()
+    excluded = {path.resolve() for path in candidate_paths}
+    hashes: dict[str, str] = {}
+    for path in root.rglob("*.csv"):
+        if path.resolve() in excluded:
+            continue
+        hashes[sha256(path)] = str(path.relative_to(REPO_ROOT))
+    return hashes
+
+
 def verify_daily_submission_quota(api: Any, batch_size: int, log_path: Path | None) -> None:
     """Fail closed unless Kaggle currently permits the whole batch."""
     limits = api.competition_get_submission_limits(COMPETITION)
@@ -177,6 +246,10 @@ def validate_submit_worktree(git_output: Any, current_commit: str) -> None:
         "status", "--porcelain=v1", "--untracked-files=all"
     ).splitlines()
     allowed_pending_paths = {
+        "README.md",
+        "requirements.txt",
+        "requirements-gpu.txt",
+        "licenses/THIRD_PARTY_NOTICES.md",
         "docs/experiment-log.md",
         "docs/model-sprint.md",
         "notebooks/README.md",
@@ -187,6 +260,29 @@ def validate_submit_worktree(git_output: Any, current_commit: str) -> None:
         "scripts/experiments/train_native_unet_swin_tiny.py",
         "scripts/experiments/build_rule_compliant_test_consensus.py",
         "scripts/submit_prepared_batch.py",
+        "scripts/validate_submission_rles.py",
+        "scripts/reproduce_final_family_vote.py",
+        "scripts/reproduce_final_three_family_consensus.py",
+        "src/filament_baseline/runtime.py",
+        "scripts/run_public_unet_ensemble.py",
+        "scripts/reinfer_yolo_test_tta.py",
+        "scripts/evaluate_public_unet_yolo_family_fusion.py",
+        "scripts/run_hdjojo_yolo26x_test_inference.py",
+        "reports/template/kaggle_comp_report_fi_segm_2026.zip",
+        "reports/template/source/main.tex",
+        "reports/template/source/main_backup.tex",
+        "reports/template/source/preamble.tex",
+        "reports/template/source/main.bib",
+        "reports/final/main.tex",
+        "reports/final/main.bib",
+        "reports/final/preamble.tex",
+        "reports/final/figures/validation-oof-overlays.png",
+        "reports/final/technical-report.pdf",
+        "configs/observation_oof_seed42_5fold.csv",
+        "configs/final-inference.json",
+        "scripts/reproduce_final_solution.py",
+        "notebooks/kaggle/final_solution/filament-final-submission.ipynb",
+        "notebooks/kaggle/final_solution/kernel-metadata.json",
     }
     unexpected_changes = []
     for row in status_rows:
@@ -287,6 +383,39 @@ def main() -> int:
         with exclusive_submission_lock():
             api = kaggle_api()
             existing = existing_submission_descriptions(api)
+            historical_hashes = existing_submission_hashes(existing)
+            local_hashes = existing_local_submission_csvs({path for _, path in resolved})
+            duplicates = [
+                (candidate, path, historical_hashes.get(candidate["sha256"]))
+                for candidate, path in resolved
+                if candidate["sha256"] in historical_hashes
+            ]
+            duplicates.extend(
+                (candidate, path, {"source": local_hashes[candidate["sha256"]], "message": "local CSV"})
+                for candidate, path in resolved
+                if candidate["sha256"] in local_hashes
+            )
+            emit(
+                {
+                    "event": "submission_hash_preflight",
+                    "historical_submission_hashes": len(historical_hashes),
+                    "local_prior_submission_csv_hashes": len(local_hashes),
+                    "candidate_count": len(resolved),
+                    "previously_submitted_matches": len(duplicates),
+                    "utc": datetime.now(timezone.utc).isoformat(),
+                },
+                args.log,
+            )
+            if duplicates:
+                details = [
+                    f"{path.relative_to(REPO_ROOT)} matches {prior['source']} "
+                    f"({prior['message'] or prior['stdout']})"
+                    for _, path, prior in duplicates
+                ]
+                raise ValueError(
+                    "candidate bytes already appear in Kaggle submission logs: "
+                    + "; ".join(details)
+                )
             for candidate, path in resolved:
                 message = str(candidate["message"]).strip()
                 if message in existing:

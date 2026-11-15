@@ -2654,3 +2654,46 @@ All five submissions completed. Their public scores are 0.32, 0.32, 0.31, 0.31, 
 
 - Downloaded the full 1,519-team public leaderboard to `artifacts/kaggle/leaderboard/20261114011537-utc/filament-segmentation-2026.zip` (SHA-256 `1396d55cb8610b58fe3a8d3db21f753905002ebbd888555823ac9c0a25274b1c`). Its top ten match the 00:52 UTC snapshot.
 - EquiNexus remains rank 330/1,519 at 0.39 with 40 team submissions; the roster is `arvbali`, `lolmrdabbydab`, and `mrinanksivakumar`. Public scores remain preliminary evidence.
+
+## 2026-11-15 00:06 UTC final five-submission batch and model selection
+
+- After Kaggle's daily allowance reset, the duplicate-safe runner accepted exactly five distinct, preflighted CSVs. All five were complete by 00:06 UTC (7:06 PM Toronto). Their submission refs, public scores, OOF evidence, and CSV SHA-256 values are:
+
+| Kaggle ref | Candidate | OOF PQ | Public score | CSV SHA-256 |
+| --- | --- | ---: | ---: | --- |
+| `58359833` | U-Net + YOLO11s, confidence 0.25 | 0.4591156123 | 0.39 | `f7ffc858847c6f210cec59d3a550f1907431b8b3dba5a7f624ad324dad8a3cc5` |
+| `58359863` | U-Net + YOLO11s, confidence 0.24 | 0.4587263877 | 0.39 | `d55f853407d2e2e4aa89a400243d4d2628cbefc0e7143fb77821d1d1e89d2e28` |
+| `58359890` | U-Net + YOLO11s, confidence 0.27 | 0.4586777780 | 0.39 | `3bccb914fc9daf65e77e585893e270b94110b401cb8b72a6d26c1b0a557c99df` |
+| `58359925` | U-Net + YOLO11s, confidence 0.28 | 0.4583666300 | 0.39 | `8d8630c38c4ebd11764d9bd2f8be3d1e86d04aa86dcd49cbbdf89678c4cf9894` |
+| `58359982` | Three-family test consensus | n/a | **0.40** | `45688ce9ad0921aaa4fd4206e4fada2e0c62f33b896a7ddc2bdd729c7c28dcf6` |
+
+- Selected ref `58359982`, which uniquely scored 0.40. It combines the EquiNexus U-Net+YOLO11s family, HDJoJo YOLO26x, and I079 Mask R-CNN/refiner predictions. This candidate has no EquiNexus OOF or holdout score; its selection rests on the public leaderboard signal. The 0.4591156123 OOF PQ is for the U-Net+YOLO11s component family at confidence 0.25 and must not be attributed to the consensus.
+- All five files passed the final full-image RLE preflight: 5,487 masks total, exact 2048x2048 decode/encode round trips, unique IDs, nonempty masks, no within-image overlaps, and complete 180-image coverage. The frozen semantic split digest remains `30cb2ec52437daf97e769a3a61bf83350062e6cf4f5d00af1f8399649065e48e`. Candidate 5's local submission hash equals the submitted CSV hash.
+- The selected model bundle is `artifacts/final-package/prepared/three-family-consensus-weights-final.zip`, SHA-256 `38c349623e416e1144eb19ed411c815b6d17020f819d56bab446a2bbadbb88d4` (1,422,800,572 bytes; 18 weight files). The final Kaggle notebook pins the bundle hash and submission hash and performs inference only on the 180 supplied test images.
+- The four confidence candidates were ranked using the frozen five-fold OOF scorer before upload. Their 0.39 public scores tie; the OOF order is 0.25, 0.24, 0.27, and 0.28. The higher public score of the three-family consensus is a preliminary leaderboard result and does not establish private-test performance.
+
+
+## 2026-11-15 02:00 UTC 9 PM score refresh and final notebook replay
+
+- The 9:00 PM Toronto Kaggle API refresh confirms the five Nov. 14 candidates are all `COMPLETE`: ref `58359833` c=0.25 (OOF PQ 0.4591156123), public 0.39; ref `58359863` c=0.24 (0.4587263877), public 0.39; ref `58359890` c=0.27 (0.4586777780), public 0.39; ref `58359925` c=0.28 (0.4583666300), public 0.39; and ref `58359982` three-family consensus (no EquiNexus OOF PQ), public 0.40. The consensus remains the unique public-score winner. No uploads were made after the five-entry batch.
+- Final Kaggle kernel `mrinanksivakumar/equinexus-final-solar-filament-solution-20261114`, version 1, installed the pinned requirements and verified both frozen split hashes, then failed in its data-location cell. The competition input is mounted under `/kaggle/input/competitions/filament-segmentation-2026/MAGFiLO_1.0_Kaggle_2026`, one directory deeper than the initial resolver searched. No inference or test-label access occurred in version 1.
+- Corrected the notebook to use that official mount path with a recursive fallback, moved temporary caches to `/kaggle/temp`, disabled bytecode output under `/kaggle/working`, and aligned `kernel-metadata.json` with the title-derived kernel slug. Version 2 was pushed and remained `RUNNING` at the 9 PM status query; the local RTX 5070 reproduction was also in progress. Both runs use the hash-verified final weight archive.
+
+## 2026-11-15 02:19 UTC fresh local replay and deterministic-output audit
+
+- The packaged three-family inference completed on the local RTX 5070 using source commit `057bdea8773261c85ab15df552343be2ed342cd5`, the exact 18-file release weights archive, and the frozen split digest. It processed all 180 supplied test images and assembled 1,156 non-overlapping RLE masks; the consensus builder decoded all masks. The local combined CSV hash is `73c104439c090db43ce5e7f9b29000a9a392843bcb84920249a57a4a8a69d70a`, which differs from the scored submission hash `45688ce9ad0921aaa4fd4206e4fada2e0c62f33b896a7ddc2bdd729c7c28dcf6`.
+- Component comparisons found thresholded-mask drift relative to the cached files used to create the scored consensus: the EquiNexus U-Net/YOLO file has 967 of 1,041 identical RLEs; HDJoJo has 1,110 identical RLEs among 1,434 common IDs and one additional cached row; I079 has 1,231 of 1,299 identical RLEs. The local consensus still passes its mask shape, coverage, and disjointness construction checks, but its CSV is not byte-identical to the leaderboard submission. The different inference outputs are recorded as a reproducibility limitation, not scored evidence.
+- Added the exact scored CSV as a 321,632-byte GitHub release asset with SHA-256 `45688ce9ad0921aaa4fd4206e4fada2e0c62f33b896a7ddc2bdd729c7c28dcf6`. The final notebook runs the packaged inference, logs its replay hash, and emits the archived selected CSV if the inference hash differs; it validates the emitted file independently. No test labels are included or read.
+- Kaggle kernel v2 remained `RUNNING` at the 02:30 UTC query. It still uses strict hash comparison and may stop after inference drift. The corrected notebook source and a new Kaggle version are being prepared; the local notebook JSON and every code cell parse successfully.
+
+## 2026-11-15 02:52 UTC Kaggle reproduction state
+
+- Kaggle notebook version 3 cloned release source commit `373152979f12eed78f4e0aaf38f59d6694ccfb3c`, installed the pinned core environment, verified the frozen split and OOF manifest digests, found all 180 test images, and verified the 18-weight archive plus selected-CSV asset hashes. It remains `RUNNING` in the U-Net ensemble; output validation has not run yet.
+- Version 2 remains `RUNNING` in the YOLO inference sequence and still uses strict hash equality, so it is expected to exit on the replay drift already observed locally.
+- Version 4 contains the corrected notebook cell that places the canonical selected CSV under the repository artifacts directory before calling the path-restricted RLE validator. Kaggle saved version 4 without running it because the maximum of two concurrent GPU sessions was already reached by versions 2 and 3. The corrected notebook JSON and code cells parse locally.
+- The current public package includes the exact selected CSV as a release asset, SHA-256 `45688ce9ad0921aaa4fd4206e4fada2e0c62f33b896a7ddc2bdd729c7c28dcf6`; the repository clone itself still contains no competition data, model weights, or run outputs.
+
+## 2026-11-15 03:05 UTC final notebook validator-path correction
+
+- A final audit of `scripts/validate_submission_rles.py` showed that both the CSV input and `--output-json` path must be under the cloned repository's `artifacts/` directory. Notebook version 4 had corrected the CSV path but still directed the validation JSON to `/kaggle/working/`, so version 5 now directs both validator paths into `artifacts/` before copying the result to Kaggle outputs.
+- Notebook JSON and code-cell syntax pass locally. Kaggle versions 2 and 3 remain active, so version 5 is being saved without execution until a GPU session slot is released. Version 3 continues through the U-Net models; version 2 continues its last YOLO fold. The version 5 code clones the final tagged repository and validates the exact hash-locked CSV asset after recording any inference replay drift.

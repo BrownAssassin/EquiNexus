@@ -213,17 +213,17 @@ def main() -> int:
     data_root = args.data_root.expanduser().resolve()
     weights_root = args.weights_root.expanduser().resolve()
     output_root = args.output_root.expanduser().resolve()
-    if not data_root.is_relative_to(REPO_ROOT / "data"):
-        raise ValueError(f"Competition input must stay inside the workspace data directory: {data_root}")
-    if not weights_root.is_relative_to(REPO_ROOT / "data" / "reference"):
-        raise ValueError(f"Public model data must stay inside data/reference: {weights_root}")
+    if not (weights_root.is_relative_to(REPO_ROOT / "data" / "reference") or
+            weights_root.is_relative_to(REPO_ROOT / "weights")):
+        raise ValueError(f"Public model weights must stay inside data/reference or weights/: {weights_root}")
     if not output_root.is_relative_to(REPO_ROOT / "artifacts"):
         raise ValueError(f"Run outputs must stay under artifacts/: {output_root}")
     if args.tta_views not in (1, 2, 4, 8) or args.views_per_pass > args.tta_views:
         raise ValueError("Invalid TTA configuration")
 
-    split_path = REPO_ROOT / "data" / "splits" / "observation_split_seed42.csv"
-    split_sha = sha256(split_path)
+    config_path = REPO_ROOT / "configs" / "validation-baseline.json"
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+    split_sha = str(config.get("expected_split_sha256", ""))
     if split_sha != EXPECTED_SPLIT_SHA256:
         raise ValueError(f"Frozen split digest changed: {split_sha}")
 
@@ -251,7 +251,11 @@ def main() -> int:
     if device.type == "cuda":
         torch.cuda.set_device(device)
         torch.cuda.reset_peak_memory_stats(device)
-        torch.backends.cudnn.benchmark = True
+    torch.use_deterministic_algorithms(True, warn_only=True)
+    torch.backends.cudnn.benchmark = False
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cuda.matmul.allow_tf32 = False
+    torch.backends.cudnn.allow_tf32 = False
     hardware = hardware_info()
     if device.type == "cuda":
         torch.cuda.reset_peak_memory_stats(device)
@@ -343,6 +347,12 @@ def main() -> int:
         "models_used": model_records,
         "tta_views": args.tta_views,
         "views_per_pass": args.views_per_pass,
+        "deterministic_inference": {
+            "torch_deterministic_algorithms": True,
+            "cudnn_benchmark": False,
+            "cudnn_deterministic": True,
+            "tf32": False,
+        },
         "keep_rule": KEEP_RULE,
         "input_normalization": f"(pixel/255 - disk mean) / disk std; radius {DISK_RADIUS}",
         "competition_test_input_count": len(test_paths),

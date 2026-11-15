@@ -13,13 +13,19 @@ from typing import Any
 
 TRACKED_RUNTIME_PACKAGES = (
     "numpy",
-    "opencv-python-headless",
+    "opencv-python",
     "pandas",
     "scikit-learn",
     "scipy",
+    "scikit-image",
     "matplotlib",
+    "Pillow",
     "pycocotools",
     "torch",
+    "torchvision",
+    "segmentation-models-pytorch",
+    "timm",
+    "ultralytics",
 )
 
 

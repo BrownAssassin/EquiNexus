@@ -48,7 +48,13 @@ def validate_submission(
     submission_path = submission_path.expanduser().resolve()
     test_image_dir = test_image_dir.expanduser().resolve()
     _require_within(submission_path, ARTIFACTS_ROOT, "Submission CSV")
-    _require_within(test_image_dir, DATA_ROOT, "Test image directory")
+    if not (
+        test_image_dir.is_relative_to(DATA_ROOT)
+        or str(test_image_dir).startswith("/kaggle/input/")
+    ):
+        raise ValueError(
+            "Test images must be inside the local data/ folder or a Kaggle input mount"
+        )
     if not submission_path.is_file():
         raise FileNotFoundError(submission_path)
     if not test_image_dir.is_dir():

@@ -168,8 +168,14 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     for path, label in ((manifest_path, "manifest"), (output_dir, "output directory")):
         if not path.is_relative_to(submissions_root):
             raise ValueError(f"{label} must remain under {submissions_root}")
-    if not test_image_dir.is_relative_to((ROOT / "data").resolve()):
-        raise ValueError("Test image directory must remain inside the repository data folder")
+    allowed_test_roots = [(ROOT / "data").resolve()]
+    kaggle_input = Path("/kaggle/input")
+    if kaggle_input.is_dir():
+        allowed_test_roots.append(kaggle_input.resolve())
+    if not any(test_image_dir.is_relative_to(root) for root in allowed_test_roots):
+        raise ValueError(
+            "Test image directory must remain inside repository data/ or /kaggle/input"
+        )
     if output_dir.exists():
         raise FileExistsError(f"Refusing to overwrite {output_dir}")
 

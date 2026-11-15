@@ -78,9 +78,15 @@ def main() -> int:
         "output_dir": args.output_dir.expanduser().resolve(),
     }
     for key, path in paths.items():
-        if not path.is_relative_to(ROOT):
-            raise ValueError(f"{key} must be inside this repository: {path}")
-    for key in ("data_root", "unet_predictions", "detector_predictions", "incumbent_observations", "unet_observations"):
+        if key == "data_root":
+            continue
+        allowed_root = ROOT / "artifacts" if key == "output_dir" else ROOT
+        if not path.is_relative_to(allowed_root):
+            raise ValueError(f"{key} must remain under {allowed_root}: {path}")
+    required_inputs = ["unet_predictions", "detector_predictions"]
+    if args.partition != "test":
+        required_inputs.extend(["incumbent_observations", "unet_observations"])
+    for key in ["data_root", *required_inputs]:
         if not paths[key].exists():
             raise FileNotFoundError(paths[key])
     if paths["output_dir"].exists() and any(paths["output_dir"].iterdir()):
@@ -252,6 +258,12 @@ def main() -> int:
         for row in observation_rows
     ]
     elapsed = time.perf_counter() - started
+    source_file_paths = {
+        "public_unet_predictions": paths["unet_predictions"],
+        "yolo11s_predictions": paths["detector_predictions"],
+        "public_unet_observations": paths["unet_observations"],
+        "incumbent_observations": paths["incumbent_observations"],
+    }
     metadata = {
         "run_name": paths["output_dir"].name,
         "created_utc": datetime.now(timezone.utc).isoformat(),
@@ -260,13 +272,20 @@ def main() -> int:
             "public_unet": "CC BY-NC-SA 4.0; attribution and ShareAlike terms apply",
             "yolo11s": "AGPL-3.0 code and weights",
         },
-        "training_data_boundary": "The public U-Net uses only source-fold checkpoints that excluded each scored observation; YOLO models were trained on the outer training partition. No public MAGFiLO test labels were used.",
+        "training_data_boundary": (
+            "Inference reads only the supplied test H-alpha images and public fixed checkpoints; "
+            "no test ground truth is read. The public U-Net model pool was trained on the full "
+            "competition training partition, and YOLO was trained on the development partition."
+            if args.partition == "test"
+            else "Each scored development observation uses its source-fold U-Net checkpoint and held-out YOLO fold. The public U-Net model pool includes training observations from the reserved partition; the reserved partition is not reported as an independent evaluation."
+        ),
         "evaluation_partition": {
             "holdout": "frozen observation-grouped 20% holdout",
             "oof": "cross-fitted competition training observations",
             "test": "competition supplied test images",
         }[args.partition],
-        "holdout_used_for_training": False,
+        "holdout_used_for_training": True,
+        "yolo_training_used_frozen_holdout": False,
         "holdout_used_for_model_or_threshold_selection": False,
         "test_ground_truth_used": False,
         "fusion_rule": {
@@ -289,12 +308,8 @@ def main() -> int:
         "per_observation": per_observation,
         "source_files": {
             label: {"path": str(path), "sha256": sha256(path)}
-            for label, path in (
-                ("public_unet_predictions", paths["unet_predictions"]),
-                ("yolo11s_predictions", paths["detector_predictions"]),
-                ("public_unet_observations", paths["unet_observations"]),
-                ("incumbent_observations", paths["incumbent_observations"]),
-            )
+            for label, path in source_file_paths.items()
+            if path.is_file()
         },
         "output_predictions": {"path": str(predictions_path), "sha256": sha256(predictions_path)},
         "overlays": overlays,
