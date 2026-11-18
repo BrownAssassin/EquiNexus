@@ -1,6 +1,6 @@
 # Solar Filament Segmentation Challenge 2026: working brief
 
-Reviewed 2026-11-04. Kaggle pages are JavaScript-rendered, so some tab contents could not be read directly; details below are linked to the official overview, official host clarifications, and Kaggle-hosted materials where available.
+Reviewed 2026-11-15. Kaggle pages are JavaScript-rendered, so some tab contents could not be read directly; details below are linked to the official overview, official host clarifications, and Kaggle-hosted materials where available. The live Kaggle CLI deadline was checked directly.
 
 ## Task and data
 
@@ -27,7 +27,7 @@ This matters because the public MAGFiLO v1.0 release overlaps the competition te
 ## Schedule and final package
 
 - Competition launch: July 10, 2026.
-- The overview announcement gives **November 15, 2026** as the deadline to submit final reports and solutions, and November 30 for winner announcements. The authenticated Kaggle CLI listing reports the submission deadline as `2026-11-15T06:00:00`; Kaggle's host documentation describes converting UTC deadlines to local time, which places this at **November 15, 2026, 1:00 AM Toronto time (EST)**. This is separate from the EquiNexus agent-sprint cutoff of November 13 at 8:00 PM Toronto time. Recheck the official [important dates](https://www.kaggle.com/competitions/filament-segmentation-2026/overview/important-dates) and [Kaggle time-zone guidance](https://www.kaggle.com/discussions/competition-hosting/434091) before scheduling any final run.
+- The public overview still lists **November 15, 2026** for final reports and solutions. However, the authenticated Kaggle CLI listing checked on November 15 gives the competition submission deadline as `2026-11-16T11:59:59` UTC, which is **November 16, 2026, 6:59:59 AM Toronto time (EST)**. The overview does not clarify whether the report/form cutoff moved too; treat those as separate dates until the organizers confirm otherwise. See the official [important dates](https://www.kaggle.com/competitions/filament-segmentation-2026/overview/important-dates) and [Kaggle time-zone guidance](https://www.kaggle.com/discussions/competition-hosting/434091).
 - Final judging materials include a four-page technical report, a publicly accessible Git repository, a `requirements.txt` with exact versions, and a Jupyter notebook showing the complete pipeline. The committee should be able to reproduce the predictions without requesting extra files/access. A form is required for final evaluation.
 - The open-access policy says to make the repository public immediately after competition close and keep it public at least through winner announcements. The overview also asks for a publicly accessible repository in the final materials; plan to meet the earlier applicable requirement.
 - The top three share up to $3,000. Prize acceptance requires reproducible source/configuration and a technical report. The winners are also to be announced at IEEE BigData 2026, December 14-17 in Phoenix.

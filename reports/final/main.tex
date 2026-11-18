@@ -34,21 +34,28 @@
 \subtitle{A Solution to the Solar Filament Segmentation Challenge 2026} % DO NOT CHANGE
 
 
-\author{\guide{Firstname Lastname}}
+\author{\guide{Mrinank Sivakumar}}
 \affiliation{%
-  \institution{\guide{Your Institution}}  % <- Optional (remove if you are not currently affiliated with any institute)
-  \city{\guide{City}}
-  \country{\guide{Country}}
+  \city{\guide{Mississauga}}
+  \country{\guide{Canada}}
 }
-\email{first.author@example.com}   % <- Replace with your own email
+\email{mrinank.sivakumar@gmail.com}
 
-% \author{\guide{Second Author}}
-% \affiliation{%
-%   \institution{\guide{Your Institution}}  % <- Optional (remove if you are not currently affiliated with any institute)
-%   \city{\guide{City}}
-%   \country{\guide{Country}}
-% }
-% \email{second.author@example.com}  % <- Replace with your own email
+\author{\guide{Arv Bali}}
+\affiliation{%
+  \institution{\guide{Adelaide University}}
+  \city{\guide{Adelaide}}
+  \country{\guide{Australia}}
+}
+\email{baliarv21@gmail.com}
+
+\author{\guide{Thai Le}}
+\affiliation{%
+  \institution{\guide{Adelaide University}}
+  \city{\guide{Adelaide}}
+  \country{\guide{Australia}}
+}
+\email{thaitimmy22@gmail.com}
 
 \begin{abstract}
     This report describes EquiNexus's solution to the Solar Filament Segmentation Challenge~2026. We selected a label-free, three-family consensus of predictions from a U-Net/YOLO11s fusion, YOLO26x, and Mask R-CNN/refiner for the supplied test images. Among five completed uploads, Kaggle reference 58359982 received the highest public score, 0.40. The selected consensus has no EquiNexus OOF score. Its U-Net/YOLO11s component family reached PQ 0.459116 (95\% observation-bootstrap interval 0.4491--0.4692) at $c=0.25$ on 565 development observations and 922 annotator views. That grouped OOF result describes the component family, not the selected consensus. Public leaderboard scores are preliminary and are not independent estimates of private-set performance.

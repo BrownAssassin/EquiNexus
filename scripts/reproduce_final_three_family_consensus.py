@@ -113,8 +113,9 @@ def main() -> int:
     if not (weights_root / "i079" / "final_detector.pt").is_file():
         raise FileNotFoundError(weights_root / "i079" / "final_detector.pt")
 
-    staging = ROOT / "artifacts" / "submissions" / "final-consensus-reproduction-inputs"
-    consensus_output = ROOT / "artifacts" / "submissions" / "final-consensus-reproduction-output"
+    run_slug = output_root.name
+    staging = ROOT / "artifacts" / "submissions" / f"final-consensus-{run_slug}-inputs"
+    consensus_output = ROOT / "artifacts" / "submissions" / f"final-consensus-{run_slug}-output"
     for path in (staging, consensus_output):
         if path.exists():
             raise FileExistsError(f"Refusing to overwrite existing path: {path}")

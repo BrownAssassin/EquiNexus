@@ -918,12 +918,14 @@ def main() -> None:
     random.seed(42)
     np.random.seed(42)
     torch.manual_seed(42)
-    torch.cuda.manual_seed_all(42)
-    torch.backends.cudnn.benchmark = True
-    if not torch.cuda.is_available():
-        fail("CUDA is required")
-    device = torch.device("cuda:0")
-    torch.cuda.reset_peak_memory_stats(device)
+    use_cuda = torch.cuda.is_available()
+    if use_cuda:
+        torch.cuda.manual_seed_all(42)
+        torch.backends.cudnn.benchmark = True
+        device = torch.device("cuda:0")
+        torch.cuda.reset_peak_memory_stats(device)
+    else:
+        device = torch.device("cpu")
     detector_path = locate_exact_file(
         "final_detector.pt", EXPECTED_MD5["final_detector.pt"]
     )
@@ -1113,12 +1115,13 @@ def main() -> None:
         "frozen_split_digest": None,
         "validation_status": "test-only inference; no EquiNexus holdout score",
         "elapsed_seconds": time.perf_counter() - started,
-        "gpu": torch.cuda.get_device_name(0),
-        "peak_gpu_memory_allocated_bytes": int(
-            torch.cuda.max_memory_allocated(device)
+        "device": str(device),
+        "gpu": torch.cuda.get_device_name(0) if use_cuda else None,
+        "peak_gpu_memory_allocated_bytes": (
+            int(torch.cuda.max_memory_allocated(device)) if use_cuda else 0
         ),
-        "peak_gpu_memory_reserved_bytes": int(
-            torch.cuda.max_memory_reserved(device)
+        "peak_gpu_memory_reserved_bytes": (
+            int(torch.cuda.max_memory_reserved(device)) if use_cuda else 0
         ),
         "training_executed": False,
     }
